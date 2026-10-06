@@ -1,8 +1,10 @@
+
 # METALHEART // Y2K
 
 A **foobar2000** theme with a chrome, steel-blue and toxic-lime look. It is built with Columns UI and WebView2 HTML panels.
 
-### ▶ [Watch the demo](docs/demo.webm) (54 s, WebM)
+### ▶ Watch the demo (54 s, WebM)
+[demo.webm](https://github.com/user-attachments/assets/306fbc62-f122-443c-9090-d0fe6273c32d)
 
 The demo shows the default theme playing a synthetic test track. It goes through:
 - the liquid orb, synced lyrics and spectrum;
