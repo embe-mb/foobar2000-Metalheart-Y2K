@@ -82,9 +82,10 @@ You have two ways back:
 
 ## Features
 
-- **The deck.** It has:
-  - a jewel case with your cover art and a spinning CD;
-  - an LCD screen showing the track details, badges, the artist's country flag, a karaoke line of synced lyrics with a preview of the next line, and a spectrum analyser;
+This theme is primarily catered to those who use MusicBrainz Picard and scrobble their information to ListenBrainz. Various parts of this theme pull information from MusicBrainz to further enhance the experience of those that love to see data represented in multitudes of ways.
+
+- **The main deck.** It has:
+  - a simulated LCD screen showing the track details, badges, the artist's country flag, a karaoke-style line of synced lyrics with a preview of the next line, and a spectrum analyser;
   - a control pod with a stereo VU meter and an oscilloscope.
 - **CUSTOMIZE DECK.** Changes apply live, and the customizer sets:
   - **Centerpiece:** ORB (liquid goo in a wireframe cage with orbit rings), TOWERS (PS2-style glass data towers), HELIX (a Y2K DNA double helix), or CYCLE (a different one on every new track).
@@ -92,9 +93,9 @@ You have two ways back:
   - **Theme colour:** lime, aqua, ice blue, magenta, amber or ember red, cross-fading over the whole skin. The **ALBUM ART** option takes its colours from the cover of what's playing, in MONO (one colour) or MULTI (up to three).
 - **Seek bar.** It is built in, shows the track's waveform, and follows the theme colour. The styles are bars, wave and LED.
 - **Info tabs.**
-  - **Dossier:** release, credits, rip-log and MusicBrainz details.
+  - **Dossier:** release, credits, rip-log and MusicBrainz details. This section relies on the default Columns UI configuration due to things like OpenLyrics and MilkDrop needing panels to function properly.
   - **Artist Bio:** biography and discography.
-  - **Lyrics**, **MilkDrop** (with about 900 presets) and **Tags**.
+  - **Lyrics**, **MilkDrop** (with about 900 public domain presets) and **Tags**.
 
 The full guide is in [`README - METALHEART Y2K.txt`](README%20-%20METALHEART%20Y2K.txt).
 
