@@ -2,6 +2,15 @@
 
 A **foobar2000** theme with a chrome, steel-blue and toxic-lime look. It is built with Columns UI and WebView2 HTML panels.
 
+### ▶ [Watch the demo](docs/demo.webm) (54 s, WebM)
+
+The demo shows the default theme playing a synthetic test track. It goes through:
+- the liquid orb, synced lyrics and spectrum;
+- the TOWERS and HELIX centerpieces;
+- the digital rain and retro grid backgrounds;
+- theme colours and album-art colours;
+- the waveform seek bar styles and the lyrics tab.
+
 foobar2000 itself is **not included**. Install it first from [foobar2000.org](https://www.foobar2000.org/download). The standard installer and the portable option both work.
 
 ## Requirements
