@@ -1,21 +1,73 @@
 # METALHEART // Y2K
 
-A portable **foobar2000** music player skin with a chrome, steel-blue and toxic-lime look.
+A **foobar2000** theme with a chrome, steel-blue and toxic-lime look. It is built with Columns UI and WebView2 HTML panels.
 
-It runs on foobar2000 v2.26 (64-bit, portable) with Columns UI and WebView2 HTML panels.
+foobar2000 itself is **not included**. Install it first from [foobar2000.org](https://www.foobar2000.org/download). The standard installer and the portable option both work.
+
+## Requirements
+
+- Windows 10 or 11, 64-bit.
+- foobar2000 v2.x, **64-bit**.
+- The Microsoft Edge WebView2 Runtime. It is already built into Windows 11 and current Windows 10.
 
 ## Download
 
-Get **`foobar2000-Metalheart-Y2K.zip`** from the [Releases page](../../releases/latest).
+Get **`Metalheart-Y2K-theme.zip`** from the [Releases page](../../releases/latest), then extract it (right-click > Extract All).
 
-1. Unzip it anywhere, for example your Desktop or a USB stick.
-2. Run `foobar2000.exe`.
+## Installing
 
-Nothing is installed into Windows, and every setting stays in the `profile` folder.
+### Option A: the installer (recommended)
 
-**Requirements:**
-- Windows 10 or 11, 64-bit.
-- The Microsoft Edge WebView2 Runtime. It is already built into Windows 11 and current Windows 10.
+1. Close foobar2000.
+2. Double-click **`Install Metalheart Y2K.cmd`**.
+3. Check that the foobar2000 folder it found is right (use **Browse...** to change it), then press **INSTALL**.
+4. If foobar2000 asks which user interface to use, pick **Columns UI** and press OK.
+
+During step 3 the installer:
+- downloads the components the theme needs, straight from their official pages;
+- copies the theme files into your foobar2000 settings folder;
+- starts foobar2000.
+
+After step 4 it applies the Metalheart layout on its own.
+
+Your previous Columns UI settings are backed up first, to `<settings folder>\metalheart-backup\<date>\`.
+
+> Windows may warn about a downloaded script. Choose **More info > Run anyway**. The installer is plain PowerShell, and you can read it in [`installer/Install-Metalheart.ps1`](installer/Install-Metalheart.ps1).
+
+### Option B: drag and drop
+
+1. Close foobar2000.
+2. Open your foobar2000 **settings folder**:
+   - for a **portable** install, the `profile` folder inside your foobar2000 folder;
+   - for a **standard** install, `%APPDATA%\foobar2000-v2` (paste it into Explorer's address bar).
+3. Drag the **contents** of this pack's `profile` folder (`webview` and `milkdrop2`) into it, and let Windows merge the folders.
+4. Start foobar2000 and install each [component](#components):
+   1. Download its `.fb2k-component` file.
+   2. Open **File > Preferences > Components** and press **Install...**.
+   3. Press **Apply** and let foobar2000 restart.
+5. When asked which user interface to use, pick **Columns UI**.
+6. Go to **File > Preferences > Display > Columns UI > Import configuration...** and pick `<settings folder>\webview\y2k\layouts\Metalheart-Y2K.fcl`.
+7. Optionally, for the clean look, untick these in the **View** menu:
+   1. **Show status pane**.
+   2. **Show toolbars**. This also hides the menu bar; the PREFS button in the control pod still opens Preferences.
+
+### Going back
+
+You have two ways back:
+- import another Columns UI configuration;
+- close foobar2000 and copy the backed-up `foo_ui_columns.dll.cfg` back into `<settings folder>\configuration`.
+
+## Components
+
+| Component | Author | Used for |
+|---|---|---|
+| [Columns UI](https://www.foobar2000.org/components/view/foo_ui_columns) | reupen | the window layout |
+| [WebView2](https://www.foobar2000.org/components/view/foo_webview2) | J. Cassis | the deck, seek bar, library, playlist and info tabs |
+| [OpenLyrics](https://www.foobar2000.org/components/view/foo_openlyrics) | jacquesh | the LYRICS tab and the deck's lyric line |
+| [MilkDrop 2](https://www.foobar2000.org/components/view/foo_vis_milk2) | J. Cassis | the MILKDROP tab |
+| [Album List Panel](https://www.foobar2000.org/components/view/foo_uie_albumlist) | reupen | the library in the classic layout |
+| [ListenBrainz 2](https://github.com/phw/foo_listenbrainz2/releases) | phw | scrobbling (optional) |
+| [Navidrome / Subsonic](https://www.foobar2000.org/components/view/foo_navidrome) | santiagorod92 | the NAVIDROME button (optional) |
 
 ## Features
 
@@ -28,23 +80,28 @@ Nothing is installed into Windows, and every setting stays in the `profile` fold
   - **LCD backgrounds:** bubbles, TV static, digital rain and a retro grid.
   - **Theme colour:** lime, aqua, ice blue, magenta, amber or ember red, cross-fading over the whole skin. The **ALBUM ART** option takes its colours from the cover of what's playing, in MONO (one colour) or MULTI (up to three).
 - **Seek bar.** It is built in, shows the track's waveform, and follows the theme colour. The styles are bars, wave and LED.
-- **Info tabs.** Dossier and Bio tabs show artist biographies, discographies and credits.
-- **Built-in panels.** OpenLyrics, the ListenBrainz scrobbler, a Navidrome / Subsonic browser, the MilkDrop visualiser and the Album List.
+- **Info tabs.**
+  - **Dossier:** release, credits, rip-log and MusicBrainz details.
+  - **Artist Bio:** biography and discography.
+  - **Lyrics**, **MilkDrop** (with about 900 presets) and **Tags**.
 
 The full guide is in [`README - METALHEART Y2K.txt`](README%20-%20METALHEART%20Y2K.txt).
 
 ## What's in this repo
 
-| Folder | Contents |
+| Path | Contents |
 |---|---|
-| `webview/y2k/` | The HTML/JS/CSS panels: deck, seek bar, library, playlist, headers, dossier, bio. In the player they live in `profile\webview\y2k\`. |
-| `themes/` | The Columns UI layouts (`Metalheart-Y2K.fcl` and the `classic` variant). |
+| `Install Metalheart Y2K.cmd`, `installer/` | The installer. |
+| `profile/webview/y2k/` | The HTML/JS/CSS panels, plus the Columns UI layouts in `layouts/`. |
+| `profile/milkdrop2/` | The MilkDrop preset and texture pack. |
 
-The ready-to-run player, with foobar2000 and all the components, is only in the release zip.
+## Licence
 
-## Credits
+The theme is under the [MIT licence](LICENSE).
 
-- [foobar2000](https://www.foobar2000.org/) by Peter Pawlowski.
-- Components: Columns UI, foo_webview2, OpenLyrics, ListenBrainz 2, Navidrome, MilkDrop 2, Album List, Waveform Seekbar. Each belongs to its own author.
-- Fonts: DSEG, Orbitron and Silkscreen, all under the SIL Open Font License.
-- Flags: [flag-icons](https://github.com/lipis/flag-icons), under the MIT licence.
+Bundled assets keep their own licences:
+- Fonts: DSEG, Orbitron and Silkscreen, under the SIL Open Font License.
+- Flags: [flag-icons](https://github.com/lipis/flag-icons), under MIT.
+- MilkDrop presets: from the projectM collection (see `PRESETS-LICENSE.md`).
+
+foobar2000 is © Peter Pawlowski and is not included. Each component belongs to its own author.

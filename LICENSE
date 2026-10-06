@@ -1,0 +1,29 @@
+MIT License
+
+Copyright (c) 2026 mb.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---------------------------------------------------------------------------
+This licence covers the METALHEART // Y2K theme files (HTML/CSS/JS panels,
+layouts and installer). Bundled third-party assets keep their own licences:
+fonts (SIL Open Font License, profile/webview/y2k/fonts/OFL-*.txt), flags
+(flag-icons, MIT, profile/webview/y2k/flags/LICENSE-flag-icons.txt) and the
+MilkDrop presets (profile/milkdrop2/presets/PRESETS-LICENSE.md).
+foobar2000 and its components are not included.

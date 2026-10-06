@@ -3,21 +3,61 @@
   A portable foobar2000 music player skin — chrome, steel blue & toxic lime
 =====================================================================
 
-  foobar2000 v2.26 (64-bit, portable) + Columns UI + WebView2 panels.
-  Unzip anywhere (Desktop, USB stick, D:\Apps ...) and run foobar2000.exe.
-  Nothing is installed into Windows; every setting lives in .\profile\.
+  A theme for foobar2000 v2 (64-bit): Columns UI + WebView2 panels.
+  foobar2000 itself is not included; install it from https://www.foobar2000.org/
+  (the standard installer and the portable option both work).
 
 
 ---------------------------------------------------------------------
  REQUIREMENTS
 ---------------------------------------------------------------------
   * Windows 10 or 11, 64-bit
+  * foobar2000 v2.x, 64-bit (https://www.foobar2000.org/download)
   * Microsoft Edge WebView2 Runtime — already built into Windows 11 and
     current Windows 10. If the top "deck" and the Dossier / Bio tabs stay
     blank, install the Evergreen runtime:
     https://developer.microsoft.com/microsoft-edge/webview2/
   * Internet connection for the optional online features (artist bios,
     artist-country flags, discography covers, lyrics, ListenBrainz).
+
+
+---------------------------------------------------------------------
+ INSTALLING
+---------------------------------------------------------------------
+  Unzip Metalheart-Y2K-theme.zip first (right-click > Extract All).
+
+  OPTION A — INSTALLER (recommended)
+    1. Close foobar2000.
+    2. Double-click "Install Metalheart Y2K.cmd".
+    3. Check the foobar2000 folder it found (Browse... to change it) and
+       press INSTALL. It downloads the components below from their official
+       pages, copies the theme files and starts foobar2000.
+    4. If foobar2000 asks which user interface to use, pick Columns UI and
+       press OK. The installer then applies the Metalheart layout by itself.
+    Your previous Columns UI settings are backed up first, to
+    <settings folder>\metalheart-backup\<date>\foo_ui_columns.dll.cfg.
+
+  OPTION B — DRAG AND DROP
+    1. Close foobar2000.
+    2. Open your foobar2000 settings folder:
+         portable install  -> the "profile" folder inside your foobar2000 folder
+         standard install  -> %APPDATA%\foobar2000-v2  (paste into Explorer)
+    3. Drag the CONTENTS of this pack's "profile" folder (webview, milkdrop2)
+       into it and allow Windows to merge the folders.
+    4. Start foobar2000 and install each component in COMPONENTS below:
+       download its .fb2k-component file, then File > Preferences >
+       Components > Install... (or drag the file onto that page), Apply,
+       and let foobar2000 restart.
+    5. When asked which user interface to use, pick Columns UI.
+    6. File > Preferences > Display > Columns UI > Import configuration...
+       and pick <settings folder>\webview\y2k\layouts\Metalheart-Y2K.fcl
+    7. For the clean look, in the View menu untick "Show status pane", then
+       "Show toolbars" (that hides the menu bar too; the PREFS button in the
+       control pod opens Preferences).
+
+  REMOVING / GOING BACK
+    Import another Columns UI configuration, or close foobar2000 and copy the
+    backed-up foo_ui_columns.dll.cfg back into <settings folder>\configuration.
 
 
 ---------------------------------------------------------------------
@@ -111,7 +151,7 @@
     track in view. Files can't be dragged from Explorer onto this panel — use
     File > Add files / Add folder in the menu bar, or the library.
     Prefer the classic foobar2000 panels (tag editing, drag & drop, sorting)?
-    Import themes\Metalheart-Y2K-classic.fcl (see TIPS below).
+    Import layouts\Metalheart-Y2K-classic.fcl (see TIPS below).
 
   RIGHT TABS
     DOSSIER    Everything MusicBrainz Picard writes, organised: Release
@@ -122,7 +162,7 @@
                Audio/File, MusicBrainz IDs (all clickable) and Listening
                stats. Click a capsule header to collapse/expand a section.
     LYRICS     OpenLyrics — synced lyrics (LRCLIB first, then QQ/NetEase/
-               Genius). Lyrics are cached in profile\lyrics\.
+               Genius). Lyrics are cached in <settings folder>\lyrics\.
     ARTIST BIO Photo, origin + flag, years active, genres, band members,
                Wikipedia biography, official/Bandcamp/Discogs/... links and a
                full discography with Cover Art Archive covers (click to open).
@@ -151,8 +191,8 @@
     re-saved as UTF-8) are fully parsed.
   * Messed up the layout? Re-import the original theme:
     File > Preferences > Display > Columns UI > "Import configuration..." and
-    pick themes\Metalheart-Y2K.fcl (custom panels) or
-    themes\Metalheart-Y2K-classic.fcl (native Columns UI library/playlist).
+    pick <settings folder>\webview\y2k\layouts\Metalheart-Y2K.fcl
+    (custom panels) or layouts\Metalheart-Y2K-classic.fcl (native Columns UI library/playlist).
     Afterwards press CUSTOMIZE DECK > APPLY TO LYRICS PANEL once more if
     you use a theme colour other than lime.
   * Edit the look: the deck, dossier and bio are plain HTML/CSS/JS in
@@ -161,16 +201,17 @@
 
 
 ---------------------------------------------------------------------
- COMPONENTS INCLUDED  (profile\user-components-x64\)
+ COMPONENTS  (the installer downloads these; drag-and-drop users install them)
 ---------------------------------------------------------------------
-  Columns UI 3.7.0 ................. reupen            (UI framework)
-  Album List Panel 2.2.0 ........... reupen            (library tree)
-  WebView2 0.3.27 .................. J. Cassis         (HTML panels)
-  Waveform Seek Bar 0.5.3 .......... J. Cassis         (installed, not in the layout)
-  MilkDrop 2 0.9.14 ................ J. Cassis
-  OpenLyrics 1.13 .................. jacquesh
-  ListenBrainz 2 1.5.0 ............. phw
-  Navidrome / Subsonic 1.19.0 ...... santiagorod92
+  Columns UI ........... reupen         https://www.foobar2000.org/components/view/foo_ui_columns
+  Album List Panel ..... reupen         https://www.foobar2000.org/components/view/foo_uie_albumlist
+  WebView2 ............. J. Cassis      https://www.foobar2000.org/components/view/foo_webview2
+  OpenLyrics ........... jacquesh       https://www.foobar2000.org/components/view/foo_openlyrics
+  MilkDrop 2 ........... J. Cassis      https://www.foobar2000.org/components/view/foo_vis_milk2
+  ListenBrainz 2 ....... phw            https://github.com/phw/foo_listenbrainz2/releases  (optional)
+  Navidrome / Subsonic . santiagorod92  https://www.foobar2000.org/components/view/foo_navidrome  (optional)
+  Tested with Columns UI 3.7.0, Album List 2.2.0, WebView2 0.3.27, OpenLyrics 1.13,
+  MilkDrop 2 0.9.14, ListenBrainz 2 1.5.0, Navidrome 1.19.0.
 
 ---------------------------------------------------------------------
  CREDITS & LICENCES FOR BUNDLED ASSETS
@@ -182,7 +223,8 @@
     (profile\webview\y2k\fonts\OFL-*.txt)
   * MilkDrop presets: original MilkDrop 2 pack + a selection from
     "Cream of the Crop" (ISOSCELES) via the projectM project; textures from
-    the projectM texture pack. See profile\milkdrop2\presets\PRESETS-LICENSE.md
+    the projectM texture pack. See <settings folder>\milkdrop2\presets\PRESETS-LICENSE.md
   * Online data: MusicBrainz (CC0), Wikipedia text (CC BY-SA 4.0),
     Cover Art Archive, LRCLIB.
-  * foobar2000 (c) Peter Pawlowski — https://www.foobar2000.org/
+  * The METALHEART // Y2K theme files: MIT licence (LICENSE).
+  * foobar2000 (c) Peter Pawlowski (not included) — https://www.foobar2000.org/
