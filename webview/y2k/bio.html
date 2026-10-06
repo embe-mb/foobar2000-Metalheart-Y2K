@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Metalheart Artist Bio</title>
+<link rel="stylesheet" href="common.css?v=9">
+<style>
+  body { overflow-y: auto; overflow-x: hidden; padding: 8px 8px 14px; }
+  .head { padding: 10px; display: grid; grid-template-columns: 110px 1fr; gap: 12px; align-items: center; margin-bottom: 10px; }
+  .photo { width: 110px; height: 110px; border-radius: 50%; background: #0b0e11 center/cover no-repeat; position: relative;
+    box-shadow: 0 0 0 2px #000, 0 0 0 5px rgba(197,205,214,.55), 0 0 0 6px #000, 0 6px 16px rgba(0,0,0,.6); }
+  .photo::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: radial-gradient(circle at 35% 25%, rgba(255,255,255,.45), transparent 45%); }
+  .photo.none { display: grid; place-items: center; color: var(--chrome-4); font: 900 30px/1 var(--display); }
+  .name { font: 900 20px/1.15 var(--display); color: #18202a; text-shadow: 0 1px 0 rgba(255,255,255,.7); word-break: break-word; }
+  .sub { margin-top: 5px; font: 700 11px/1.4 var(--ui); color: #2e3946; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
+  .sub .flag { height: 12px; }
+  .dis { font: 400 11px/1.3 var(--ui); color: #4b5562; margin-top: 3px; font-style: italic; }
+
+  .box { margin-bottom: 10px; }
+  .box .body { margin: -2px 3px 0; padding: 10px 11px 11px; border-radius: 0 0 8px 8px; background: linear-gradient(180deg, rgba(28,36,45,.92), rgba(16,21,27,.92)); border: 1px solid #000; border-top: none; box-shadow: 0 4px 10px rgba(0,0,0,.4); }
+  .bio-text { font: 12.5px/1.55 Verdana, Tahoma, sans-serif; color: #d3dbe4; user-select: text; }
+  .bio-text p { margin: 0 0 9px; }
+  .bio-text.clamp { max-height: 260px; overflow: hidden; mask-image: linear-gradient(180deg, #000 75%, transparent); }
+  .more { margin-top: 6px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .chips .pill { height: 16px; font-size: 8px; }
+  .links { display: flex; flex-wrap: wrap; gap: 5px; }
+  .btn { height: 20px; padding: 0 9px; border-radius: 10px; cursor: pointer; display: inline-flex; align-items: center; gap: 5px;
+    font: 400 8px/1 var(--pixel); letter-spacing: .08em; text-transform: uppercase; color: #fff; text-shadow: 0 1px 0 rgba(0,0,0,.5);
+    background: linear-gradient(180deg, rgba(255,255,255,.5), rgba(255,255,255,.08) 50%, transparent 51%), linear-gradient(180deg, var(--blue-2), var(--blue-4)); border: 1px solid #0d223a; }
+  .btn.lime { color: rgb(var(--c0b1c01)); text-shadow: 0 1px 0 rgba(255,255,255,.5); background: linear-gradient(180deg, rgba(255,255,255,.6), rgba(255,255,255,.1) 50%, transparent 51%), linear-gradient(180deg, var(--lime-1), var(--lime-3)); border-color: var(--lime-4); }
+  .btn:hover { filter: brightness(1.15); }
+  .members { display: grid; grid-template-columns: 1fr auto; gap: 3px 10px; font-size: 12px; }
+  .members .yr { color: var(--text-dim); font-size: 11px; white-space: nowrap; }
+  .members a { color: var(--text); cursor: pointer; }
+  .members a:hover { color: var(--lime-1); }
+
+  .disco { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 10px; }
+  .rg { cursor: pointer; text-align: center; }
+  .rg .cv { aspect-ratio: 1; border-radius: 4px; background: #0b0e11 center/cover no-repeat; position: relative; box-shadow: 0 0 0 1px #000, 0 4px 8px rgba(0,0,0,.6); overflow: hidden; }
+  .rg .cv::after { content: ""; position: absolute; inset: 0; background: linear-gradient(125deg, rgba(255,255,255,.28), transparent 40%); }
+  .rg .cv .ph { position: absolute; inset: 0; display: grid; place-items: center; font: 400 8px/1.3 var(--pixel); color: var(--chrome-4); padding: 6px; }
+  .rg.current .cv { box-shadow: 0 0 0 2px var(--lime-2), 0 0 12px var(--lime-glow); }
+  .rg .tt { font: 700 10.5px/1.2 var(--ui); color: var(--text); margin-top: 5px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .rg .yy { font: 400 8px/1 var(--pixel); color: var(--blue-1); margin-top: 3px; letter-spacing: .08em; }
+  .rg:hover .tt { color: var(--lime-1); }
+  .tabs { display: flex; gap: 4px; margin-bottom: 8px; flex-wrap: wrap; }
+  .tabs .pill { cursor: pointer; }
+
+  .empty, .loading { padding: 30px 10px; text-align: center; color: var(--text-dim); font: 400 8px/1.6 var(--pixel); letter-spacing: .1em; }
+  .empty b, .loading b { display: block; font: 900 20px/1.2 var(--display); color: var(--chrome-4); margin-bottom: 6px; }
+  .loading b { animation: pulse 1.2s ease-in-out infinite; color: var(--lime-3); }
+  @keyframes pulse { 50% { opacity: .3; } }
+  .src { margin-top: 8px; font: 400 8px/1.4 var(--pixel); color: var(--text-faint); letter-spacing: .08em; }
+</style>
+</head>
+<body>
+<div class="backdrop"></div>
+<div id="root"><div class="empty"><b>ARTIST BIO</b>Play or select a track</div></div>
+
+<script src="common.js?v=9"></script>
+<script>
+'use strict';
+const { esc, safe, mb, getJSON, DAY } = Y2K;
+const $root = document.getElementById('root');
+let shownKey = '', seq = 0, discoFilter = 'Album';
+
+function box(title, body, lime) {
+  if (!body) return '';
+  return '<section class="box"><div class="capsule' + (lime ? ' lime' : '') + '"><span class="orb"></span>' + esc(title) + '<span class="grip"><i></i><i></i><i></i></span></div><div class="body">' + body + '</div></section>';
+}
+const yearOf = (d) => (d || '').slice(0, 4);
+const lifeSpan = (ls, type) => {
+  if (!ls) return '';
+  const b = yearOf(ls.begin), e = yearOf(ls.end);
+  if (!b && !e) return '';
+  const word = type === 'Person' ? (e ? '' : 'born ') : (e ? '' : 'active since ');
+  return e ? b + ' – ' + e : word + b;
+};
+
+async function resolveArtist(t) {
+  const ids = (t.mb_artist || t.mb_albumartist || '').split(/;\s*/).filter(Boolean);
+  // prefer the album artist when the track artist is a "feat." credit
+  let id = ids[0];
+  const aa = (t.mb_albumartist || '').split(/;\s*/)[0];
+  if (aa && aa !== '89ad4ac3-39f7-470e-963a-56509c546377' /* Various Artists */) id = id || aa;
+  if (id) return id;
+  const name = (t.albumartist && !/^various/i.test(t.albumartist) ? t.albumartist : t.artist || '').split(/\s+(feat\.?|ft\.?|featuring|&|x|vs\.?)\s+/i)[0].trim();
+  if (!name) return '';
+  const s = await mb('artist?query=' + encodeURIComponent('artist:"' + name.replace(/"/g, '') + '"') + '&limit=3').catch(() => null);
+  const hit = s && s.artists && s.artists.find((a) => a.score >= 90 && a.name.toLowerCase() === name.toLowerCase()) || (s && s.artists && s.artists[0] && s.artists[0].score >= 98 ? s.artists[0] : null);
+  return hit ? hit.id : '';
+}
+
+async function wikiFor(artist) {
+  const rels = artist.relations || [];
+  let title = '', lang = 'en';
+  const wp = rels.find((r) => r.type === 'wikipedia' && r.url && /\/\/en\./.test(r.url.resource));
+  if (wp) title = decodeURIComponent(wp.url.resource.split('/wiki/')[1] || '');
+  if (!title) {
+    const wd = rels.find((r) => r.type === 'wikidata');
+    if (wd) {
+      const q = wd.url.resource.split('/').pop();
+      const j = await getJSON('https://www.wikidata.org/w/api.php?action=wbgetentities&ids=' + q + '&props=sitelinks%7Cclaims&sitefilter=enwiki&format=json&origin=*', 30 * DAY).catch(() => null);
+      const ent = j && j.entities && j.entities[q];
+      if (ent && ent.sitelinks && ent.sitelinks.enwiki) title = ent.sitelinks.enwiki.title;
+    }
+  }
+  if (!title) return null;
+  const sum = await getJSON('https://' + lang + '.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(title.replace(/ /g, '_')), 14 * DAY).catch(() => null);
+  const ext = await getJSON('https://' + lang + '.wikipedia.org/w/api.php?action=query&prop=extracts&explaintext=1&exsectionformat=plain&redirects=1&format=json&origin=*&titles=' + encodeURIComponent(title), 14 * DAY).catch(() => null);
+  let full = '';
+  if (ext && ext.query && ext.query.pages) { const p = Object.values(ext.query.pages)[0]; full = p && p.extract || ''; }
+  return { title, summary: sum, full, url: 'https://' + lang + '.wikipedia.org/wiki/' + encodeURIComponent(title.replace(/ /g, '_')) };
+}
+
+const LINK_TYPES = [
+  ['official homepage', 'Official site'], ['bandcamp', 'Bandcamp'], ['discogs', 'Discogs'], ['last.fm', 'Last.fm'],
+  ['allmusic', 'AllMusic'], ['soundcloud', 'SoundCloud'], ['youtube', 'YouTube'], ['streaming', 'Streaming'], ['free streaming', 'Streaming'],
+  ['social network', 'Social'], ['wikidata', 'Wikidata'], ['songkick', 'Songkick'], ['setlistfm', 'setlist.fm'], ['rateyourmusic', 'RYM'],
+];
+
+function paragraphs(text, maxChars) {
+  const clean = text.replace(/\n{2,}/g, '\n').split('\n').map((s) => s.trim()).filter((s) => s && !/^(References|External links|See also|Discography|Notes)$/i.test(s));
+  let out = '', n = 0;
+  for (const p of clean) { if (maxChars && n > maxChars) break; out += '<p>' + esc(p) + '</p>'; n += p.length; }
+  return out;
+}
+
+async function render(t) {
+  const my = ++seq;
+  $root.innerHTML = '<div class="loading"><b>SCANNING…</b>Querying MusicBrainz &amp; Wikipedia</div>';
+  const id = await resolveArtist(t).catch(() => '');
+  if (my !== seq) return;
+  if (!id) {
+    $root.innerHTML = '<div class="empty"><b>UNKNOWN ARTIST</b>' + esc(t.artist || '') + '<br>No MusicBrainz match — tag with MusicBrainz Picard for best results</div>';
+    return;
+  }
+  const a = await mb('artist/' + id + '?inc=url-rels+artist-rels+genres+tags+aliases').catch(() => null);
+  if (my !== seq) return;
+  if (!a) { $root.innerHTML = '<div class="empty"><b>OFFLINE?</b>Could not reach MusicBrainz</div>'; return; }
+
+  // header renders immediately; slower parts fill in
+  const cc = a.country || (a.area && a.area['iso-3166-1-codes'] && a.area['iso-3166-1-codes'][0]) || '';
+  const place = [a['begin-area'] && a['begin-area'].name, a.area && a.area.name].filter((x, i, arr) => x && arr.indexOf(x) === i).join(', ');
+  const head = '<div class="head chrome screws"><div class="photo none" id="photo">' + esc((a.name || '?').charAt(0)) + '</div><div>' +
+    '<div class="name">' + esc(a.name) + '</div>' +
+    (a.disambiguation ? '<div class="dis">' + esc(a.disambiguation) + '</div>' : '') +
+    '<div class="sub">' + (cc ? Y2K.flagHTML(cc) : '') + '<span>' + esc([a.type, place].filter(Boolean).join(' · ')) + '</span>' +
+    (lifeSpan(a['life-span'], a.type) ? '<span class="pill dark">' + esc(lifeSpan(a['life-span'], a.type)) + '</span>' : '') + '</div></div></div>';
+
+  const genres = (a.genres && a.genres.length ? a.genres : (a.tags || [])).slice().sort((x, y) => (y.count || 0) - (x.count || 0)).slice(0, 14);
+  const rels = a.relations || [];
+  const members = rels.filter((r) => r.type === 'member of band' && r.direction === 'backward');
+  const memberOf = rels.filter((r) => r.type === 'member of band' && r.direction === 'forward');
+  const links = [];
+  for (const [type, label] of LINK_TYPES) rels.filter((r) => r.type === type && r.url).slice(0, type === 'social network' ? 3 : 1).forEach((r) => {
+    let l = label; if (type === 'social network') { try { l = new URL(r.url.resource).hostname.replace(/^www\./, '').split('.')[0]; } catch (e) {} }
+    links.push('<span class="btn" data-url="' + esc(r.url.resource) + '">' + esc(l) + '</span>');
+  });
+  links.push('<span class="btn lime" data-url="https://musicbrainz.org/artist/' + id + '">MusicBrainz</span>');
+
+  let html = head + '<div id="bioSlot"><div class="loading" style="padding:14px"><b style="font-size:13px">LOADING BIOGRAPHY…</b></div></div>';
+  if (genres.length) html += box('Genres', '<div class="chips">' + genres.map((g) => '<span class="pill dark">' + esc(g.name) + '</span>').join('') + '</div>');
+  if (members.length) html += box('Members', '<div class="members">' + members.map((m) => '<a data-url="https://musicbrainz.org/artist/' + m.artist.id + '">' + esc(m.artist.name) + (m.attributes && m.attributes.length ? ' <span class="muted" style="font-size:10.5px">(' + esc(m.attributes.join(', ')) + ')</span>' : '') + '</a><span class="yr">' + esc([yearOf(m.begin), m.ended ? yearOf(m.end) || '?' : 'now'].filter(Boolean).join('–')) + '</span>').join('') + '</div>');
+  if (memberOf.length) html += box('Member of', '<div class="members">' + memberOf.map((m) => '<a data-url="https://musicbrainz.org/artist/' + m.artist.id + '">' + esc(m.artist.name) + '</a><span class="yr">' + esc([yearOf(m.begin), m.ended ? yearOf(m.end) || '?' : 'now'].filter(Boolean).join('–')) + '</span>').join('') + '</div>');
+  html += box('Links', '<div class="links">' + links.join('') + '</div>');
+  html += '<div id="discoSlot"></div>';
+  $root.innerHTML = html;
+  wire();
+
+  // biography (Wikipedia)
+  wikiFor(a).then((w) => {
+    if (my !== seq) return;
+    const slot = document.getElementById('bioSlot');
+    if (!w || (!w.full && !(w.summary && w.summary.extract))) { slot.innerHTML = box('Biography', '<div class="muted">No Wikipedia article linked to this artist on MusicBrainz.</div>'); return; }
+    const img = w.summary && (w.summary.thumbnail || w.summary.originalimage);
+    if (img) { const p = document.getElementById('photo'); p.classList.remove('none'); p.textContent = ''; p.style.backgroundImage = 'url("' + img.source + '")'; }
+    const text = w.full || w.summary.extract;
+    const long = text.length > 1400;
+    slot.innerHTML = box('Biography', '<div class="bio-text' + (long ? ' clamp' : '') + '" id="bioText">' + paragraphs(text, 0) + '</div>' +
+      '<div class="links more">' + (long ? '<span class="btn lime" id="moreBtn">Read more</span>' : '') + '<span class="btn" data-url="' + esc(w.url) + '">Wikipedia</span></div>' +
+      '<div class="src">TEXT FROM WIKIPEDIA (CC BY-SA 4.0) · DATA FROM MUSICBRAINZ (CC0)</div>');
+    const mbtn = document.getElementById('moreBtn');
+    if (mbtn) mbtn.onclick = () => { const b = document.getElementById('bioText'); const c = b.classList.toggle('clamp'); mbtn.textContent = c ? 'Read more' : 'Show less'; };
+    wire();
+  }).catch(() => {});
+
+  // discography
+  loadDisco(id, t, my);
+}
+
+async function loadDisco(id, t, my) {
+  const j = await mb('release-group?artist=' + id + '&limit=100').catch(() => null);
+  if (my !== seq || !j) return;
+  const groups = (j['release-groups'] || []).filter((g) => !(g['secondary-types'] || []).length || discoFilter === 'All');
+  const types = ['Album', 'EP', 'Single', 'All'];
+  const sel = (g) => discoFilter === 'All' || g['primary-type'] === discoFilter;
+  const list = groups.filter(sel).sort((x, y) => (x['first-release-date'] || '9999').localeCompare(y['first-release-date'] || '9999'));
+  const curRG = (t.mb_releasegroup || '').split(/;\s*/)[0];
+  const tabs = '<div class="tabs">' + types.map((x) => '<span class="pill ' + (x === discoFilter ? 'lime' : '') + '" data-filter="' + x + '">' + x + 'S</span>').join('') + '</div>';
+  const grid = list.length ? '<div class="disco">' + list.map((g) =>
+    '<div class="rg' + (g.id === curRG ? ' current' : '') + '" data-url="https://musicbrainz.org/release-group/' + g.id + '">' +
+    '<div class="cv" data-rg="' + g.id + '"><div class="ph">' + esc(g.title) + '</div></div>' +
+    '<div class="tt">' + esc(g.title) + '</div><div class="yy">' + esc(yearOf(g['first-release-date']) || '----') + ' · ' + esc((g['primary-type'] || '').toUpperCase()) + '</div></div>').join('') + '</div>'
+    : '<div class="muted">Nothing in this category.</div>';
+  document.getElementById('discoSlot').innerHTML = box('Discography · ' + list.length, tabs + grid);
+  document.querySelectorAll('[data-filter]').forEach((p) => p.onclick = (e) => { e.stopPropagation(); discoFilter = p.dataset.filter; loadDisco(id, t, my); });
+  wire();
+  // Cover Art Archive thumbnails, lazily
+  const io = new IntersectionObserver((ents) => ents.forEach((en) => {
+    if (!en.isIntersecting) return;
+    io.unobserve(en.target);
+    const im = new Image();
+    im.onload = () => { en.target.style.backgroundImage = 'url("' + im.src + '")'; en.target.querySelector('.ph').remove(); };
+    im.src = 'https://coverartarchive.org/release-group/' + en.target.dataset.rg + '/front-250';
+  }), { root: null, rootMargin: '200px' });
+  document.querySelectorAll('.cv[data-rg]').forEach((el) => io.observe(el));
+}
+
+function wire() { document.querySelectorAll('[data-url]').forEach((el) => { el.onclick = (e) => { e.stopPropagation(); Y2K.openUrl(el.dataset.url); }; }); }
+
+function update() {
+  const t = Y2K.getTrack();
+  if (t._src === 'none') { if (shownKey) { shownKey = ''; seq++; $root.innerHTML = '<div class="empty"><b>ARTIST BIO</b>Play or select a track</div>'; } return; }
+  const key = (t.mb_artist || '') + '|' + (t.mb_albumartist || '') + '|' + (t.albumartist || t.artist);
+  if (key === shownKey) return;
+  shownKey = key;
+  render(t);
+}
+
+Y2K.onTrackContextChange(update);
+update();
+</script>
+</body>
+</html>

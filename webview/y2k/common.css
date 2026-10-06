@@ -1,0 +1,306 @@
+/* ==========================================================================
+   METALHEART // Y2K  —  shared skin for the foobar2000 WebView2 panels
+   Brushed chrome + steel-blue Web 2.0 capsules + toxic-lime LCD glow.
+   ========================================================================== */
+
+@font-face { font-family: "Orbitron"; src: url("fonts/Orbitron.ttf") format("truetype"); font-weight: 400 900; }
+@font-face { font-family: "Silkscreen"; src: url("fonts/Silkscreen-Regular.ttf") format("truetype"); font-weight: 400; }
+@font-face { font-family: "Silkscreen"; src: url("fonts/Silkscreen-Bold.ttf") format("truetype"); font-weight: 700; }
+@font-face { font-family: "DSEG7"; src: url("fonts/DSEG7Classic-Bold.woff2") format("woff2"); font-weight: 700; }
+@font-face { font-family: "DSEG7"; src: url("fonts/DSEG7Classic-Regular.woff2") format("woff2"); font-weight: 400; }
+@font-face { font-family: "DSEG14"; src: url("fonts/DSEG14Classic-Regular.woff2") format("woff2"); }
+
+:root {
+  color-scheme: dark;
+
+  /* chrome */
+  --chrome-0: #ffffff;
+  --chrome-1: #e8edf2;
+  --chrome-2: #c5cdd6;
+  --chrome-3: #98a4b1;
+  --chrome-4: #6b7786;
+  --chrome-5: #3d4753;
+  --chrome-6: #232a33;
+
+  /* gunmetal body */
+  --metal-0: #2a333d;
+  --metal-1: #1c232b;
+  --metal-2: #131920;
+  --metal-3: #0b0f14;
+
+  /* Web 2.0 steel blue */
+  --blue-0: #cfe3f7;
+  --blue-1: #7fb1e3;
+  --blue-2: #4a86c5;
+  --blue-3: #2c5d92;
+  --blue-4: #183a60;
+
+  /* theme accent: every green in the skin is one of these r,g,b triplets; Y2K.applyScheme() recolours them */
+  --c0b1c01: 11,28,1; --c0d1a0b: 13,26,11; --c061005: 6,16,5; --c0d1f02: 13,31,2; --c0d2401: 13,36,1;
+  --c0f2402: 15,36,2; --c143003: 20,48,3; --c173005: 23,48,5; --c192c0c: 25,44,12; --c1d3f05: 29,63,5;
+  --c1d4203: 29,66,3; --c1f5a00: 31,90,0; --c2f6b07: 47,107,7; --c2f6b08: 47,107,8; --c346e0e: 52,110,14;
+  --c4f8f1d: 79,143,29; --c5f8f2d: 95,143,45; --c5fc410: 95,196,16; --c8fcf4f: 143,207,79; --c9cff2e: 156,255,46;
+  --cb9ff66: 185,255,102; --cc6ff6b: 198,255,107; --cd6ff9e: 214,255,158; --ceaffc4: 234,255,196; --cf4ffe0: 244,255,224;
+
+  /* Metalheart lime */
+  --lime-0: rgb(var(--ceaffc4));
+  --lime-1: rgb(var(--cc6ff6b));
+  --lime-2: rgb(var(--c9cff2e));
+  --lime-3: rgb(var(--c5fc410));
+  --lime-4: rgb(var(--c2f6b07));
+  --lime-glow: rgba(var(--c9cff2e), .55);
+
+  /* LCD */
+  --lcd-bg-0: rgb(var(--c0d1a0b));
+  --lcd-bg-1: rgb(var(--c061005));
+  --lcd-fg: rgb(var(--cb9ff66));
+  --lcd-fg-dim: rgb(var(--c5f8f2d));
+  --lcd-ghost: rgba(var(--c9cff2e), .07);
+
+  --amber: #ffb627;
+  --red: #ff4d4d;
+
+  --text: #dde5ee;
+  --text-dim: #8e9aa8;
+  --text-faint: #5b6673;
+
+  --ui: Tahoma, Verdana, "Segoe UI", sans-serif;
+  --display: "Orbitron", Tahoma, sans-serif;
+  --pixel: "Silkscreen", Tahoma, monospace;
+  --seg: "DSEG7", "Consolas", monospace;
+
+  --radius: 10px;
+}
+
+/* an element with its own accent channel (Y2K.scopeAccent) re-derives the named colours from its own triplets */
+[data-accent] {
+  /* Metalheart lime */
+  --lime-0: rgb(var(--ceaffc4));
+  --lime-1: rgb(var(--cc6ff6b));
+  --lime-2: rgb(var(--c9cff2e));
+  --lime-3: rgb(var(--c5fc410));
+  --lime-4: rgb(var(--c2f6b07));
+  --lime-glow: rgba(var(--c9cff2e), .55);
+
+  /* LCD */
+  --lcd-bg-0: rgb(var(--c0d1a0b));
+  --lcd-bg-1: rgb(var(--c061005));
+  --lcd-fg: rgb(var(--cb9ff66));
+  --lcd-fg-dim: rgb(var(--c5f8f2d));
+  --lcd-ghost: rgba(var(--c9cff2e), .07);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--metal-2);
+  color: var(--text);
+  font: 12px/1.35 var(--ui);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+/* ---------- backdrop: gunmetal + hex mesh + Metalheart light rays ---------- */
+.backdrop {
+  position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(120% 90% at 78% 15%, rgba(var(--c9cff2e),.10), transparent 55%),
+    radial-gradient(90% 70% at 10% 100%, rgba(74,134,197,.16), transparent 60%),
+    linear-gradient(180deg, var(--metal-0), var(--metal-2) 55%, var(--metal-3));
+}
+.backdrop::before {
+  /* hex mesh */
+  content: ""; position: absolute; inset: 0; opacity: .22;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='28' height='48.5' viewBox='0 0 28 48.5'><path d='M14 0 L28 8.08 L28 24.25 L14 32.33 L0 24.25 L0 8.08 Z M14 32.33 L14 48.5' fill='none' stroke='%2398a4b1' stroke-width='.6' stroke-opacity='.35'/></svg>");
+  background-size: 28px 48.5px;
+  mask-image: linear-gradient(180deg, transparent, #000 30%, #000 70%, transparent);
+}
+.backdrop::after {
+  /* light rays */
+  content: ""; position: absolute; inset: -40%;
+  background: repeating-conic-gradient(from 0deg at 80% 20%, rgba(255,255,255,.035) 0deg 4deg, transparent 4deg 11deg);
+  animation: rays 90s linear infinite;
+}
+@keyframes rays { to { transform: rotate(360deg); } }
+
+/* ---------- brushed chrome bezel ---------- */
+.chrome {
+  position: relative;
+  border-radius: var(--radius);
+  background:
+    repeating-linear-gradient(90deg, rgba(255,255,255,.035) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, var(--chrome-1) 0%, var(--chrome-2) 18%, var(--chrome-3) 52%, var(--chrome-2) 53%, var(--chrome-1) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.95),
+    inset 0 -1px 0 rgba(0,0,0,.35),
+    0 1px 0 rgba(255,255,255,.08),
+    0 6px 18px rgba(0,0,0,.55);
+  border: 1px solid var(--chrome-5);
+  color: var(--chrome-6);
+}
+.chrome.dark {
+  background:
+    repeating-linear-gradient(90deg, rgba(255,255,255,.025) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, #56616e 0%, #3a434e 45%, #2b333c 50%, #39424c 100%);
+  color: var(--chrome-1);
+  border-color: #11161b;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.28), inset 0 -1px 0 rgba(0,0,0,.5), 0 6px 18px rgba(0,0,0,.55);
+}
+
+/* screw heads in bezel corners */
+.screws::before, .screws::after {
+  content: ""; position: absolute; width: 7px; height: 7px; border-radius: 50%; top: 6px;
+  background: radial-gradient(circle at 35% 35%, #fff, #8995a3 60%, #3d4753);
+  box-shadow: 0 0 0 1px rgba(0,0,0,.35);
+}
+.screws::before { left: 6px; }
+.screws::after { right: 6px; }
+
+/* ---------- Web 2.0 capsule header (Smosh / XS Engineering) ---------- */
+.capsule {
+  display: flex; align-items: center; gap: 8px;
+  height: 24px; padding: 0 12px 0 4px;
+  border-radius: 12px 12px 4px 4px;
+  font: 700 11px/1 var(--display); letter-spacing: .14em; text-transform: uppercase;
+  color: #fff; text-shadow: 0 1px 0 rgba(0,0,0,.55);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.55), rgba(255,255,255,.08) 50%, transparent 51%),
+    linear-gradient(180deg, var(--blue-1), var(--blue-3));
+  border: 1px solid var(--blue-4);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.6), 0 2px 6px rgba(0,0,0,.4);
+  position: relative; overflow: hidden;
+}
+.capsule::after {
+  /* swoosh highlight */
+  content: ""; position: absolute; right: -30px; top: -14px; width: 140px; height: 40px;
+  border-radius: 50%; background: radial-gradient(closest-side, rgba(255,255,255,.35), transparent);
+}
+.capsule .orb {
+  width: 16px; height: 16px; border-radius: 50%; flex: none;
+  background: radial-gradient(circle at 35% 30%, #fff 0 8%, var(--lime-1) 25%, var(--lime-3) 60%, var(--lime-4));
+  box-shadow: 0 0 6px var(--lime-glow), inset 0 -1px 2px rgba(0,0,0,.4);
+  border: 1px solid rgb(var(--c1d3f05));
+}
+.capsule.lime {
+  color: rgb(var(--c0d1f02)); text-shadow: 0 1px 0 rgba(255,255,255,.5);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.6), rgba(255,255,255,.1) 50%, transparent 51%),
+    linear-gradient(180deg, var(--lime-1), var(--lime-3));
+  border-color: var(--lime-4);
+}
+.capsule.lime .orb { background: radial-gradient(circle at 35% 30%, #fff 0 8%, var(--blue-1) 25%, var(--blue-3) 60%, var(--blue-4)); border-color: var(--blue-4); box-shadow: 0 0 6px rgba(74,134,197,.7); }
+.capsule .grip { margin-left: auto; display: flex; gap: 2px; opacity: .6; }
+.capsule .grip i { width: 3px; height: 10px; border-radius: 2px; background: rgba(255,255,255,.7); box-shadow: 0 1px 0 rgba(0,0,0,.3); }
+
+/* ---------- LCD screen ---------- */
+.lcd {
+  position: relative;
+  border-radius: 8px;
+  color: var(--lcd-fg);
+  background:
+    radial-gradient(120% 140% at 30% 0%, rgba(var(--c9cff2e),.10), transparent 60%),
+    linear-gradient(180deg, var(--lcd-bg-0), var(--lcd-bg-1));
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--c9cff2e),.12),
+    inset 0 2px 12px rgba(0,0,0,.85),
+    0 1px 0 rgba(255,255,255,.25);
+  border: 1px solid #000;
+  text-shadow: 0 0 6px var(--lime-glow);
+  overflow: hidden;
+}
+/* (no scanline / pixel-grid overlay: keeps small text crisp) */
+.lcd::after {
+  /* glass glare */
+  content: ""; position: absolute; left: -10%; right: -10%; top: -60%; height: 100%; pointer-events: none; z-index: 3;
+  background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,0) 70%);
+  border-radius: 0 0 50% 50%;
+}
+.seg { font-family: var(--seg); font-weight: 700; letter-spacing: .04em; }
+.seg-ghost { position: relative; }
+.seg-ghost::before { content: attr(data-ghost); position: absolute; inset: 0; color: var(--lcd-ghost); text-shadow: none; }
+
+/* ---------- pills / badges ---------- */
+.pill {
+  display: inline-flex; align-items: center; gap: 5px; height: 18px; padding: 0 8px;
+  border-radius: 9px; font: 700 9.5px/1 var(--ui); letter-spacing: .05em; text-transform: uppercase; white-space: nowrap;
+  color: #13202d; text-shadow: 0 1px 0 rgba(255,255,255,.5);
+  background: linear-gradient(180deg, rgba(255,255,255,.7), rgba(255,255,255,.15) 50%, transparent 51%), linear-gradient(180deg, var(--chrome-1), var(--chrome-3));
+  border: 1px solid var(--chrome-5);
+  box-shadow: 0 1px 2px rgba(0,0,0,.45);
+}
+.pill.lime { color: rgb(var(--c0b1c01)); background: linear-gradient(180deg, rgba(255,255,255,.7), rgba(255,255,255,.15) 50%, transparent 51%), linear-gradient(180deg, var(--lime-1), var(--lime-3)); border-color: var(--lime-4); box-shadow: 0 0 8px var(--lime-glow), 0 1px 2px rgba(0,0,0,.45); }
+.pill.blue { color: #fff; text-shadow: 0 1px 0 rgba(0,0,0,.5); background: linear-gradient(180deg, rgba(255,255,255,.55), rgba(255,255,255,.1) 50%, transparent 51%), linear-gradient(180deg, var(--blue-1), var(--blue-3)); border-color: var(--blue-4); }
+.pill.amber { color: #2a1800; background: linear-gradient(180deg, rgba(255,255,255,.6), rgba(255,255,255,.1) 50%, transparent 51%), linear-gradient(180deg, #ffd27a, #e08a00); border-color: #6a3c00; }
+.pill.dark { color: var(--lime-1); text-shadow: 0 0 4px var(--lime-glow); background: linear-gradient(180deg, #2b343e, #12171d); border-color: #000; }
+.pill .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; box-shadow: 0 0 4px currentColor; }
+.pill.clickable { cursor: pointer; }
+.pill.clickable:hover { filter: brightness(1.12); }
+
+/* ---------- glossy round buttons (Xbox orb) ---------- */
+.orb-btn {
+  --size: 34px;
+  width: var(--size); height: var(--size); border-radius: 50%; flex: none;
+  display: grid; place-items: center; cursor: pointer; position: relative;
+  border: 1px solid #0d1116;
+  background:
+    radial-gradient(circle at 50% 18%, rgba(255,255,255,.85), rgba(255,255,255,0) 45%),
+    radial-gradient(circle at 50% 120%, rgba(var(--c9cff2e),.25), transparent 60%),
+    linear-gradient(180deg, var(--chrome-2), var(--chrome-4) 60%, var(--chrome-5));
+  box-shadow: inset 0 -2px 4px rgba(0,0,0,.45), inset 0 1px 0 #fff, 0 3px 6px rgba(0,0,0,.55), 0 0 0 3px rgba(0,0,0,.25);
+  transition: transform .08s, filter .15s;
+}
+.orb-btn svg { width: 46%; height: 46%; fill: #1b232c; filter: drop-shadow(0 1px 0 rgba(255,255,255,.6)); }
+.orb-btn:hover { filter: brightness(1.1); }
+.orb-btn:active { transform: translateY(1px) scale(.97); }
+.orb-btn.big { --size: 58px; }
+.orb-btn.big, .orb-btn.lime {
+  background:
+    radial-gradient(circle at 50% 16%, rgba(255,255,255,.9), rgba(255,255,255,0) 42%),
+    radial-gradient(circle at 50% 100%, var(--lime-0), transparent 55%),
+    linear-gradient(180deg, var(--lime-1), var(--lime-3) 55%, var(--lime-4));
+  box-shadow: inset 0 -3px 6px rgba(0,0,0,.4), inset 0 1px 0 #fff, 0 0 14px var(--lime-glow), 0 4px 8px rgba(0,0,0,.6), 0 0 0 4px rgba(20,26,32,.85), 0 0 0 5px var(--chrome-4);
+}
+.orb-btn.big svg, .orb-btn.lime svg { fill: rgb(var(--c0f2402)); }
+.orb-btn.on { box-shadow: inset 0 -2px 4px rgba(0,0,0,.45), inset 0 1px 0 #fff, 0 0 10px var(--lime-glow), 0 0 0 3px rgba(0,0,0,.25); }
+.orb-btn.on svg { fill: rgb(var(--c1f5a00)); }
+
+/* ---------- chrome slider (volume / seek) ---------- */
+.rail {
+  position: relative; height: 10px; border-radius: 5px; cursor: pointer;
+  background: linear-gradient(180deg, #06090c, #1b232b);
+  box-shadow: inset 0 1px 3px rgba(0,0,0,.9), 0 1px 0 rgba(255,255,255,.18);
+  border: 1px solid #000;
+}
+.rail .fill {
+  position: absolute; left: 0; top: 0; bottom: 0; border-radius: 5px; width: 0;
+  background: linear-gradient(180deg, rgba(255,255,255,.55), rgba(255,255,255,.05) 50%, transparent 51%), linear-gradient(90deg, var(--lime-4), var(--lime-2));
+  box-shadow: 0 0 8px var(--lime-glow);
+}
+.rail .knob {
+  position: absolute; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%; left: 0;
+  background: radial-gradient(circle at 40% 30%, #fff, var(--chrome-2) 45%, var(--chrome-4));
+  border: 1px solid var(--chrome-6); box-shadow: 0 2px 4px rgba(0,0,0,.6);
+}
+
+/* ---------- key/value table ---------- */
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 3px 10px; align-items: baseline; }
+.kv dt { font: 400 8px/1.9 var(--pixel); letter-spacing: .05em; text-transform: uppercase; color: var(--blue-1); white-space: nowrap; }
+.kv dd { margin: 0; color: var(--text); word-break: break-word; user-select: text; }
+.kv dd.mono { font-family: Consolas, "Lucida Console", monospace; font-size: 11px; color: var(--chrome-2); }
+.kv dd a, a.link { color: var(--lime-1); text-decoration: none; cursor: pointer; border-bottom: 1px dotted rgba(var(--cc6ff6b),.4); }
+.kv dd a:hover, a.link:hover { color: #fff; border-bottom-color: #fff; }
+
+.flag { display: inline-block; height: 1em; aspect-ratio: 4/3; vertical-align: -0.12em; border-radius: 2px; box-shadow: 0 0 0 1px rgba(0,0,0,.6), 0 1px 3px rgba(0,0,0,.5); background: #333 center/cover no-repeat; }
+
+/* ---------- scrollbars ---------- */
+::-webkit-scrollbar { width: 12px; height: 12px; }
+::-webkit-scrollbar-track { background: linear-gradient(90deg, #0b0f13, #161c22); border-left: 1px solid #000; }
+::-webkit-scrollbar-thumb { border-radius: 6px; border: 2px solid #0b0f13; background: linear-gradient(90deg, var(--chrome-2), var(--chrome-4)); }
+::-webkit-scrollbar-thumb:hover { background: linear-gradient(90deg, var(--lime-1), var(--lime-3)); }
+
+.hidden { display: none !important; }
+.muted { color: var(--text-dim); }
+.ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

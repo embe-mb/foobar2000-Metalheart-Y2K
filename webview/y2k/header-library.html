@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Metalheart Header</title>
+<link rel="stylesheet" href="common.css?v=9">
+<style>
+  body { display: flex; align-items: center; padding: 3px 4px 0; background: #121921; }
+  .capsule { flex: 1; height: 24px; border-radius: 12px 12px 3px 3px; }
+  #title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  #meta { margin-left: auto; display: flex; gap: 4px; align-items: center; position: relative; z-index: 1; flex: none; }
+  #meta .pill { height: 16px; font-size: 8.5px; letter-spacing: .04em; text-shadow: none; }
+</style></head>
+<body data-kind="library">
+  <div class="capsule"><span class="orb"></span><span id="title"></span><span id="meta"></span></div>
+  <script src="common.js?v=9"></script><script>Y2K.scopeAccent(document.body, 1); /* MULTI album colours: accent channel 1 */</script><script src="header.js?v=9"></script>
+</body></html>

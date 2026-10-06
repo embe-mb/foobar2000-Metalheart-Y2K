@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Metalheart Library</title>
+<link rel="stylesheet" href="common.css?v=9">
+<style>
+  body { display: flex; flex-direction: column; background: #121921; }
+  .top { flex: none; padding: 3px 4px 4px; display: flex; flex-direction: column; gap: 5px; }
+  .capsule { height: 26px; border-radius: 13px 13px 3px 3px; }
+  .capsule .right { margin-left: auto; display: flex; gap: 4px; align-items: center; position: relative; z-index: 1; }
+  .capsule .pill { height: 16px; font-size: 8.5px; text-shadow: none; }
+  .bar { display: flex; gap: 4px; align-items: center; padding: 0 2px; }
+  .views { display: flex; gap: 3px; }
+  .views span { height: 19px; padding: 0 9px; border-radius: 10px; cursor: pointer; display: inline-flex; align-items: center; font: 700 9px/1 var(--ui); letter-spacing: .06em; color: #b8c3cf;
+    background: linear-gradient(180deg, #2f3943, #1a2129); border: 1px solid #070a0d; box-shadow: inset 0 1px 0 rgba(255,255,255,.12); }
+  .views span:hover { color: #fff; }
+  .views span.on { color: rgb(var(--c0d1f02)); background: linear-gradient(180deg, rgba(255,255,255,.55), rgba(255,255,255,.08) 50%, transparent 51%), linear-gradient(180deg, var(--lime-1), var(--lime-3)); border-color: var(--lime-4); }
+  .search { flex: 1; min-width: 60px; height: 19px; border-radius: 10px; border: 1px solid #0d223a; padding: 0 8px 0 20px; outline: none; font: 11px var(--ui); color: #dfe7ef;
+    background: #0b1016 url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='10' cy='10' r='6' fill='none' stroke='%2398a4b1' stroke-width='2.5'/><path d='M15 15l6 6' stroke='%2398a4b1' stroke-width='2.5'/></svg>") 5px center/11px no-repeat; box-shadow: inset 0 1px 3px rgba(0,0,0,.8); }
+  .search:focus { border-color: var(--lime-3); box-shadow: inset 0 1px 3px rgba(0,0,0,.8), 0 0 6px var(--lime-glow); }
+  .crumb { display: flex; align-items: center; gap: 6px; padding: 0 4px; min-height: 0; font: 700 11px var(--ui); color: #dbe4ee; }
+  .crumb:empty { display: none; }
+  .crumb .back { cursor: pointer; color: var(--lime-1); font: 400 8px/1 var(--pixel); letter-spacing: .1em; padding: 4px 8px; border-radius: 8px; background: rgba(0,0,0,.35); border: 1px solid rgba(var(--c9cff2e),.25); }
+  .crumb .back:hover { background: rgba(var(--c9cff2e),.12); }
+  .crumb .where { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .body { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 4px 6px 12px; }
+  /* list views */
+  .li { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; height: 26px; padding: 0 8px; border-radius: 4px; cursor: pointer; font: 12px var(--ui); color: #c8d2dc; content-visibility: auto; contain-intrinsic-size: 26px; }
+  .li:nth-child(odd) { background: #161e27; }
+  .li:hover { background: linear-gradient(180deg, #3a72aa, #2c5d92); color: #fff; }
+  .li span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .li .c { font: 400 8px/1 var(--pixel); color: var(--blue-1); letter-spacing: .08em; }
+  .li:hover .c { color: #fff; }
+  .letter { font: 900 13px/1 var(--display); color: var(--lime-2); text-shadow: 0 0 6px var(--lime-glow); padding: 10px 6px 4px; letter-spacing: .1em; }
+  /* album grid */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 12px 10px; padding-top: 4px; }
+  .card { cursor: pointer; content-visibility: auto; contain-intrinsic-size: 104px 150px; min-width: 0; }
+  .card .cv { aspect-ratio: 1; border-radius: 5px; background: radial-gradient(circle at 50% 35%, #2b3540, #0d1116) center/cover no-repeat; position: relative; overflow: hidden;
+    box-shadow: 0 0 0 1px #000, 0 0 0 2px rgba(197,205,214,.22), 0 5px 10px rgba(0,0,0,.55); transition: transform .12s, box-shadow .12s; }
+  .card .cv::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(255,255,255,.24), rgba(255,255,255,.04) 48%, transparent 49%); }
+  .card .cv .ph { position: absolute; inset: 0; display: grid; place-items: center; font: 900 28px/1 var(--display); color: #3d4753; }
+  .card:hover .cv { transform: translateY(-2px); box-shadow: 0 0 0 1px #000, 0 0 0 2px var(--lime-2), 0 0 12px var(--lime-glow), 0 8px 14px rgba(0,0,0,.6); }
+  .card .tt { margin-top: 6px; font: 700 11px/1.25 var(--ui); color: #e6edf4; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .card .aa { font: 11px/1.3 var(--ui); color: #8e9aa8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card .yy { font: 400 8px/1 var(--pixel); color: var(--blue-1); margin-top: 3px; letter-spacing: .08em; }
+  .card .ed { display: inline-block; max-width: 100%; margin-top: 4px; padding: 2px 5px 1px; border-radius: 3px; font: 400 7px/1.2 var(--pixel); letter-spacing: .06em;
+    text-transform: uppercase; color: rgb(var(--c0d2401)); background: var(--lime-2); box-shadow: 0 0 5px var(--lime-glow); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* album detail */
+  .detail .head { display: grid; grid-template-columns: 132px 1fr; gap: 12px; padding: 8px; align-items: center; margin-bottom: 8px; }
+  .detail .big { width: 132px; height: 132px; border-radius: 6px; background: radial-gradient(circle at 50% 35%, #2b3540, #0d1116) center/cover no-repeat; position: relative; overflow: hidden; box-shadow: 0 0 0 1px #000, 0 0 0 3px rgba(197,205,214,.4), 0 6px 14px rgba(0,0,0,.6); }
+  .detail .big::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(255,255,255,.26), rgba(255,255,255,.05) 48%, transparent 49%); }
+  .detail .t { font: 800 15px/1.2 var(--display); color: #18202a; text-shadow: 0 1px 0 rgba(255,255,255,.7); word-break: break-word; }
+  .detail .a { font: 700 12px/1.3 var(--ui); color: #2a3440; margin-top: 3px; }
+  .detail .m { font: 11px/1.4 var(--ui); color: #4b5562; margin-top: 3px; }
+  .detail .m.ed { font: 400 8px/1.4 var(--pixel); letter-spacing: .06em; text-transform: uppercase; color: rgb(var(--c2f6b08)); }
+  .btns { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px; }
+  .btn { height: 21px; padding: 0 10px; border-radius: 11px; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; font: 700 9px/1 var(--ui); letter-spacing: .06em; text-transform: uppercase; color: #fff; text-shadow: 0 1px 0 rgba(0,0,0,.5);
+    background: linear-gradient(180deg, rgba(255,255,255,.5), rgba(255,255,255,.08) 50%, transparent 51%), linear-gradient(180deg, var(--blue-2), var(--blue-4)); border: 1px solid #0d223a; }
+  .btn.lime { color: rgb(var(--c0b1c01)); text-shadow: 0 1px 0 rgba(255,255,255,.5); background: linear-gradient(180deg, rgba(255,255,255,.6), rgba(255,255,255,.1) 50%, transparent 51%), linear-gradient(180deg, var(--lime-1), var(--lime-3)); border-color: var(--lime-4); }
+  .btn:hover { filter: brightness(1.15); }
+  .tracks .tr { display: grid; grid-template-columns: 34px 1fr auto; gap: 8px; height: 24px; align-items: center; padding: 0 8px; border-radius: 4px; font: 12px var(--ui); color: #c8d2dc; cursor: pointer; }
+  .tracks .tr:nth-child(odd) { background: #161e27; }
+  .tracks .tr:hover { background: linear-gradient(180deg, #3a72aa, #2c5d92); color: #fff; }
+  .tracks .tr .n { color: #7d8a99; text-align: right; font-size: 11px; }
+  .tracks .tr span:nth-child(2) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tracks .dh { font: 400 8px/1 var(--pixel); color: var(--lime-2); letter-spacing: .12em; padding: 10px 8px 4px; }
+  .empty { padding: 40px 12px; text-align: center; color: var(--text-dim); font: 400 8px/1.8 var(--pixel); letter-spacing: .12em; }
+  .empty b { display: block; font: 900 20px/1.3 var(--display); color: var(--chrome-4); letter-spacing: .05em; }
+  .empty .btn { margin-top: 10px; }
+  .loading b { color: var(--lime-3); animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .3; } }
+  .menu { position: fixed; z-index: 50; min-width: 180px; padding: 4px; border-radius: 8px; background: linear-gradient(180deg, #2a343f, #161d25); border: 1px solid #000; box-shadow: 0 8px 22px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.12); }
+  .menu div { padding: 5px 12px; border-radius: 5px; font: 12px var(--ui); color: #dbe4ee; cursor: pointer; white-space: nowrap; }
+  .menu div:hover { background: linear-gradient(180deg, #3a72aa, #2c5d92); color: #fff; }
+</style>
+</head>
+<body>
+<div class="top">
+  <div class="capsule"><span class="orb"></span>Media Library<span class="right" id="meta"></span></div>
+  <div class="bar">
+    <div class="views" id="views"><span data-v="artists">ARTISTS</span><span data-v="albums">ALBUMS</span><span data-v="genres">GENRES</span><span data-v="years">YEARS</span></div>
+    <input class="search" id="q" placeholder="Search…" spellcheck="false">
+  </div>
+  <div class="crumb" id="crumb"></div>
+</div>
+<div class="body" id="body"><div class="empty loading"><b>SCANNING…</b>Reading your media library</div></div>
+
+<script src="common.js?v=9"></script><script>Y2K.scopeAccent(document.body, 1); /* MULTI album colours: accent channel 1 */</script>
+<script>
+'use strict';
+const { H, esc, safe } = Y2K;
+const $ = (id) => document.getElementById(id);
+const SEPC = String.fromCharCode(30);
+const F = ['$if2(%album artist%,%artist%)', '%album%', "$year($if3($meta(originaldate),%date%,))", "$meta(genre,0)", '%title%', '%artist%',
+  '%discnumber%', '%tracknumber%', '%length_seconds%', '%length%', '%path%', '$directory_path(%path%)', "$meta(label,0)", '%totaldiscs%',
+  // edition fields: tell different versions of the same album apart
+  "$if3($meta(musicbrainz_albumid,0),$meta(musicbrainz album id,0),)", "$meta(media,0)", '$year(%date%)', '%codec%',
+  "$if3($meta(releasecountry,0),$meta(musicbrainz album release country,0),)", "$meta(catalognumber,0)"];
+const SCRIPT = F.map((x) => '[' + x + ']').join('$char(30)');
+
+let albums = [], byKey = new Map(), trackCount = 0;
+let view = safe(() => localStorage.getItem('lib:view')) || 'albums';
+let stack = [];   // drill-down: {type:'artist'|'genre'|'year'|'album', value}
+let query = '';
+
+/* ------------------------------------------------ data */
+function load() {
+  const enabled = safe(() => H.isLibraryEnabled, true);
+  const l = enabled ? safe(() => H.getLibraryItems(), 0) : 0;
+  let raw = [];
+  if (l) { raw = safe(() => JSON.parse(H.formatMetaDBHandleList(l, SCRIPT)), []); safe(() => H.releaseMetaDBHandleList(l)); }
+  trackCount = raw.length;
+  byKey = new Map();
+  for (const s of raw) {
+    const v = s.split(SEPC);
+    const t = { aa: v[0] || 'Unknown artist', album: v[1] || '(no album)', year: v[2], genre: v[3], title: v[4], artist: v[5], disc: v[6], trk: v[7], secs: +v[8] || 0, len: v[9], path: v[10], dir: v[11], label: Y2K.clean(v[12]), tdisc: +v[13] || 1,
+      mbid: v[14], media: v[15], ryear: v[16], codec: v[17], country: v[18], cat: Y2K.clean(v[19]) };
+    // one card per edition: the MusicBrainz release when tagged, otherwise the album folder
+    // (CD1/Disc 2 subfolders count as one), and never mixing formats (FLAC vs MP3 copies)
+    const edition = t.mbid || t.year + '|' + albumDir(t.dir);
+    const key = (t.aa + '|' + t.album + '|' + edition + '|' + t.codec).toLowerCase();
+    let a = byKey.get(key);
+    if (!a) {
+      a = { key, aa: t.aa, album: t.album, year: t.year, genre: t.genre, label: t.label, dir: t.dir, tracks: [], secs: 0,
+        media: t.media, ryear: t.ryear, codec: t.codec, country: t.country, cat: t.cat };
+      byKey.set(key, a);
+    }
+    a.tracks.push(t); a.secs += t.secs;
+    if (!a.genre && t.genre) a.genre = t.genre;
+  }
+  albums = [...byKey.values()];
+  // albums that exist in more than one version get an edition line on their cards
+  const versions = new Map();
+  for (const a of albums) { const k = (a.aa + '|' + a.album).toLowerCase(); versions.set(k, (versions.get(k) || 0) + 1); }
+  for (const a of albums) {
+    a.multi = versions.get((a.aa + '|' + a.album).toLowerCase()) > 1;
+    a.edition = [a.media, a.ryear && a.ryear !== a.year ? a.ryear : '', a.country, a.codec].filter(Boolean).join(' · ');
+    a.tracks.sort((x, y) => (parseInt(x.disc) || 1) - (parseInt(y.disc) || 1) || (parseInt(x.trk) || 0) - (parseInt(y.trk) || 0) || x.path.localeCompare(y.path));
+    a.dir = a.tracks[0].dir;
+    a.lc = (a.aa + ' ' + a.album).toLowerCase();
+    a.tlc = a.tracks.map((t) => (t.title + ' ' + t.artist).toLowerCase()).join('\n');
+  }
+  albums.sort((x, y) => sortName(x.aa).localeCompare(sortName(y.aa)) || (x.year || '9999').localeCompare(y.year || '9999') || x.album.localeCompare(y.album));
+  $('meta').innerHTML = trackCount ? '<span class="pill dark">' + albums.length.toLocaleString() + ' ALBUMS</span><span class="pill dark">' + trackCount.toLocaleString() + ' TRACKS</span>' : '';
+  render();
+}
+const sortName = (s) => (s || '').replace(/^(the|a|an)\s+/i, '').toLowerCase();
+
+/* ------------------------------------------------ views */
+function render() {
+  document.querySelectorAll('#views span').forEach((s) => s.classList.toggle('on', s.dataset.v === view && !stack.length));
+  const body = $('body');
+  if (!trackCount) {
+    body.innerHTML = '<div class="empty"><b>NO MUSIC YET</b>' + 'Add your music folders and they appear here' + '<br><span class="btn lime" id="addmusic">+ ADD MUSIC FOLDERS</span></div>';
+    $('addmusic').onclick = () => Y2K.runCommand('Configure');
+    $('crumb').innerHTML = ''; return;
+  }
+  const top = stack[stack.length - 1];
+  crumb();
+  if (top && top.type === 'album') return renderAlbum(byKey.get(top.value));
+  let list = albums;
+  if (top) list = albums.filter((a) => match(a, top));
+  const q = query.toLowerCase().trim();
+  if (!top && view !== 'albums' && !q) return renderGroups(view);
+  if (q) list = list.filter((a) => a.lc.includes(q) || a.tlc.includes(q));
+  renderGrid(list, !top && view === 'albums' && !q);
+  body.scrollTop = top && top.scroll ? 0 : body.scrollTop;
+}
+function match(a, f) {
+  if (f.type === 'artist') return a.aa.toLowerCase() === f.value.toLowerCase();
+  if (f.type === 'genre') return (a.genre || 'Unknown').toLowerCase() === f.value.toLowerCase();
+  if (f.type === 'year') return (f.value === 'Unknown' ? !a.year : a.year === f.value);
+  return true;
+}
+function crumb() {
+  const top = stack[stack.length - 1];
+  if (!top) { $('crumb').innerHTML = query ? '<span class="where">Results for “' + esc(query) + '”</span>' : ''; return; }
+  const label = { artist: 'ARTIST', genre: 'GENRE', year: 'YEAR', album: 'ALBUM' }[top.type];
+  const name = top.type === 'album' ? (byKey.get(top.value) || {}).album : top.value;
+  $('crumb').innerHTML = '<span class="back" id="back">◂ BACK</span><span class="where"><span style="color:var(--blue-1);font:400 8px var(--pixel);letter-spacing:.1em">' + label + '</span>&nbsp; ' + esc(name || '') + '</span>';
+  $('back').onclick = () => { stack.pop(); render(); };
+}
+function renderGroups(kind) {
+  const counts = new Map();
+  for (const a of albums) {
+    const k = kind === 'artists' ? a.aa : kind === 'genres' ? (a.genre || 'Unknown') : (a.year || 'Unknown');
+    counts.set(k, (counts.get(k) || 0) + 1);
+  }
+  let keys = [...counts.keys()];
+  if (kind === 'years') keys.sort((x, y) => (x === 'Unknown') - (y === 'Unknown') || y.localeCompare(x));
+  else keys.sort((x, y) => sortName(x).localeCompare(sortName(y)));
+  let h = '', letter = '', decade = '';
+  for (const k of keys) {
+    if (kind === 'artists') { const L = (sortName(k)[0] || '#').toUpperCase(); const LL = /[A-Z]/.test(L) ? L : '#'; if (LL !== letter) { letter = LL; h += '<div class="letter">' + LL + '</div>'; } }
+    if (kind === 'years') { const d = k === 'Unknown' ? 'UNKNOWN' : k.slice(0, 3) + '0s'; if (d !== decade) { decade = d; h += '<div class="letter">' + d + '</div>'; } }
+    const n = counts.get(k);
+    h += '<div class="li" data-k="' + esc(k) + '"><span>' + esc(k) + '</span><span class="c">' + n + ' ALBUM' + (n === 1 ? '' : 'S') + '</span></div>';
+  }
+  $('body').innerHTML = h;
+  const type = { artists: 'artist', genres: 'genre', years: 'year' }[kind];
+  $('body').querySelectorAll('.li').forEach((el) => { el.onclick = () => { stack.push({ type, value: el.dataset.k }); $('body').scrollTop = 0; render(); }; });
+}
+function albumDir(d) { return String(d || '').replace(/[\\/](cd|disc|disk)[ _-]?\d+[^\\/]*$/i, ''); }
+function renderGrid(list, remember) {
+  if (!list.length) { $('body').innerHTML = '<div class="empty"><b>NOTHING FOUND</b>Try a different search</div>'; return; }
+  const LIMIT = 4000;
+  let h = '<div class="grid">';
+  for (const a of list.slice(0, LIMIT)) {
+    h += '<div class="card" data-k="' + esc(a.key) + '"><div class="cv" data-dir="' + esc(a.dir) + '" data-track="' + esc(a.tracks[0] ? a.tracks[0].path : '') + '"><div class="ph">' + esc((a.album || '?').charAt(0).toUpperCase()) + '</div></div>' +
+      '<div class="tt">' + esc(a.album) + '</div><div class="aa">' + esc(a.aa) + '</div><div class="yy">' + esc(a.year || '----') + ' · ' + a.tracks.length + ' TRK</div>' +
+      (a.multi && a.edition ? '<div class="ed" title="One of several versions of this album">' + esc(a.edition) + '</div>' : '') + '</div>';
+  }
+  h += '</div>';
+  $('body').innerHTML = h;
+  const io = new IntersectionObserver((ents) => ents.forEach((en) => {
+    if (!en.isIntersecting) return;
+    io.unobserve(en.target);
+    const el = en.target;
+    Y2K.thumb(Y2K.toFwd(el.dataset.dir), 160, el.dataset.track).then((u) => { if (u) { el.style.backgroundImage = 'url("' + u + '")'; const p = el.querySelector('.ph'); if (p) p.remove(); } });
+  }), { root: $('body'), rootMargin: '300px' });
+  $('body').querySelectorAll('.cv[data-dir]').forEach((el) => io.observe(el));
+  $('body').querySelectorAll('.card').forEach((el) => {
+    const a = byKey.get(el.dataset.k);
+    el.onclick = () => { stack.push({ type: 'album', value: a.key }); $('body').scrollTop = 0; render(); };
+    el.ondblclick = (e) => { e.stopPropagation(); stack.pop(); Y2K.loadPaths(a.tracks.map((t) => t.path)); render(); };
+    el.oncontextmenu = (e) => { e.preventDefault(); albumMenu(e.clientX, e.clientY, a); };
+  });
+}
+function renderAlbum(a) {
+  if (!a) { stack.pop(); return render(); }
+  const multi = new Set(a.tracks.map((t) => t.disc || '1')).size > 1;
+  let tr = '', lastDisc = null;
+  a.tracks.forEach((t, i) => {
+    if (multi && t.disc !== lastDisc) { lastDisc = t.disc; tr += '<div class="dh">DISC ' + esc(t.disc || '1') + '</div>'; }
+    tr += '<div class="tr" data-i="' + i + '"><span class="n">' + esc(t.trk) + '</span><span>' + esc(t.title) + (t.artist && t.artist !== a.aa ? ' <span style="color:#8e9aa8">— ' + esc(t.artist) + '</span>' : '') + '</span><span class="n">' + esc(t.len) + '</span></div>';
+  });
+  const mins = Math.round(a.secs / 60);
+  $('body').innerHTML = '<div class="detail"><div class="head chrome screws"><div class="big" id="big"></div><div style="min-width:0">' +
+    '<div class="t">' + esc(a.album) + '</div><div class="a">' + esc(a.aa) + '</div>' +
+    '<div class="m">' + [a.year, a.label, a.genre, a.tracks.length + (a.tracks.length === 1 ? ' track' : ' tracks'), mins + ' min'].filter(Boolean).map(esc).join(' · ') + '</div>' +
+    (a.edition || a.cat ? '<div class="m ed">' + esc([a.edition, a.cat].filter(Boolean).join(' · ')) + '</div>' : '') +
+    '<div class="btns"><span class="btn lime" id="bplay">▶ Play</span><span class="btn" id="badd">+ Add</span><span class="btn" id="bnew">New playlist</span><span class="btn" id="bdir">Folder</span></div>' +
+    '</div></div><div class="tracks">' + tr + '</div></div>';
+  Y2K.thumb(Y2K.toFwd(a.dir), 264, a.tracks[0] && a.tracks[0].path).then((u) => { const b = $('big'); if (u && b) b.style.backgroundImage = 'url("' + u + '")'; });
+  const paths = a.tracks.map((t) => t.path);
+  $('bplay').onclick = () => Y2K.playPaths(paths);
+  $('badd').onclick = () => addToActive(paths);
+  $('bnew').onclick = () => newPlaylist(a.album, paths);
+  $('bdir').onclick = () => Y2K.openFile(Y2K.toFwd(a.dir));
+  $('body').querySelectorAll('.tr').forEach((el) => { el.ondblclick = () => Y2K.loadPaths(paths, a.tracks[+el.dataset.i].path); el.title = 'Double-click to load into Library Selection (double-click it there to play)'; });
+}
+function addToActive(paths) {
+  let pl = safe(() => H.activePlaylist, -1);
+  if (pl < 0) pl = Y2K.playlistIndexByName('Default', true);
+  Y2K.addPaths(pl, paths);
+}
+function newPlaylist(name, paths) { const n = safe(() => H.createPlaylist(H.playlistCount, name), -1); if (n >= 0) { Y2K.addPaths(n, paths); safe(() => { H.activePlaylist = n; }); } }
+
+let menuEl = null;
+function albumMenu(x, y, a) {
+  if (menuEl) menuEl.remove();
+  const paths = a.tracks.map((t) => t.path);
+  menuEl = document.createElement('div'); menuEl.className = 'menu';
+  [['▶  Play', () => Y2K.playPaths(paths)], ['Add to current playlist', () => addToActive(paths)], ['Send to new playlist', () => newPlaylist(a.album, paths)],
+    ['More by ' + a.aa, () => { stack.push({ type: 'artist', value: a.aa }); render(); }], ['Open folder', () => Y2K.openFile(Y2K.toFwd(a.dir))]]
+    .forEach(([t, f]) => { const d = document.createElement('div'); d.textContent = t; d.onclick = () => { menuEl.remove(); menuEl = null; f(); }; menuEl.appendChild(d); });
+  document.body.appendChild(menuEl);
+  const r = menuEl.getBoundingClientRect();
+  menuEl.style.left = Math.min(x, innerWidth - r.width - 4) + 'px'; menuEl.style.top = Math.min(y, innerHeight - r.height - 4) + 'px';
+}
+document.addEventListener('mousedown', (e) => { if (menuEl && !menuEl.contains(e.target)) { menuEl.remove(); menuEl = null; } });
+
+/* ------------------------------------------------ wiring */
+document.querySelectorAll('#views span').forEach((s) => s.onclick = () => { view = s.dataset.v; stack = []; safe(() => localStorage.setItem('lib:view', view)); $('body').scrollTop = 0; render(); });
+$('q').addEventListener('input', Y2K.debounce(() => { query = $('q').value; stack = stack.filter((s) => s.type !== 'album'); $('body').scrollTop = 0; render(); }, 200));
+$('q').addEventListener('keydown', (e) => { if (e.key === 'Escape') { $('q').value = ''; query = ''; render(); } });
+document.addEventListener('mouseup', (e) => { if (e.button === 3 && stack.length) { stack.pop(); render(); } });
+const reload = Y2K.debounce(load, 2500);
+['library:itemsAdded', 'library:itemsRemoved', 'library:itemsModified'].forEach((ev) => fb2k.on(ev, reload));
+document.addEventListener('dragover', (e) => e.preventDefault());
+document.addEventListener('drop', (e) => e.preventDefault());
+setTimeout(load, 30);
+</script>
+</body>
+</html>

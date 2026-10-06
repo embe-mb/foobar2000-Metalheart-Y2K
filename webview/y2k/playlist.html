@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Metalheart Playlist</title>
+<link rel="stylesheet" href="common.css?v=9">
+<style>
+  body { display: flex; flex-direction: column; background: #121921; }
+  .top { flex: none; padding: 3px 4px 0; display: flex; flex-direction: column; gap: 4px; }
+  .capsule { height: 26px; border-radius: 13px 13px 3px 3px; gap: 8px; }
+  .capsule #plname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 40px; cursor: text; }
+  .capsule .right { margin-left: auto; display: flex; gap: 4px; align-items: center; position: relative; z-index: 1; flex: none; }
+  .capsule .pill { height: 16px; font-size: 8.5px; text-shadow: none; }
+  .search {
+    height: 18px; width: 170px; border-radius: 9px; border: 1px solid #0d223a; padding: 0 8px 0 20px; outline: none;
+    font: 11px var(--ui); color: #dfe7ef; background: #0b1016 url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='10' cy='10' r='6' fill='none' stroke='%2398a4b1' stroke-width='2.5'/><path d='M15 15l6 6' stroke='%2398a4b1' stroke-width='2.5'/></svg>") 5px center/11px no-repeat;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,.8);
+  }
+  .search:focus { border-color: var(--lime-3); box-shadow: inset 0 1px 3px rgba(0,0,0,.8), 0 0 6px var(--lime-glow); }
+  .ibtn { height: 18px; padding: 0 7px; border-radius: 9px; cursor: pointer; display: inline-flex; align-items: center; font: 700 8.5px/1 var(--ui); letter-spacing: .05em; text-transform: uppercase; color: #fff; text-shadow: 0 1px 0 rgba(0,0,0,.5); border: 1px solid #0d223a;
+    background: linear-gradient(180deg, rgba(255,255,255,.45), rgba(255,255,255,.06) 50%, transparent 51%), linear-gradient(180deg, #4b5562, #232a33); }
+  .ibtn:hover { filter: brightness(1.2); }
+  .ibtn.on { color: rgb(var(--c0b1c01)); text-shadow: none; background: linear-gradient(180deg, rgba(255,255,255,.6), rgba(255,255,255,.1) 50%, transparent 51%), linear-gradient(180deg, var(--lime-1), var(--lime-3)); border-color: var(--lime-4); }
+
+  /* playlist tabs */
+  .tabs { display: flex; gap: 3px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; padding: 0 2px 2px; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { flex: none; height: 20px; max-width: 200px; padding: 0 11px; border-radius: 10px 10px 2px 2px; display: flex; align-items: center; gap: 5px; cursor: pointer;
+    font: 700 10.5px/1 var(--ui); color: #b8c3cf; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    background: linear-gradient(180deg, #2f3943, #1a2129); border: 1px solid #070a0d; border-bottom: none; box-shadow: inset 0 1px 0 rgba(255,255,255,.12); }
+  .tab:hover { color: #fff; }
+  .tab.active { color: rgb(var(--c0d1f02)); background: linear-gradient(180deg, rgba(255,255,255,.55), rgba(255,255,255,.08) 50%, transparent 51%), linear-gradient(180deg, var(--lime-1), var(--lime-3)); border-color: var(--lime-4); box-shadow: 0 0 8px rgba(var(--c9cff2e),.35); }
+  .tab .np { width: 0; height: 0; border-left: 6px solid currentColor; border-top: 4px solid transparent; border-bottom: 4px solid transparent; }
+  .tab.add { padding: 0 9px; font-size: 13px; }
+  .tab input { width: 120px; height: 15px; font: 700 10.5px var(--ui); border: none; outline: none; background: #0b1016; color: #fff; border-radius: 3px; padding: 0 4px; }
+
+  /* list */
+  .cols, .row { display: grid; grid-template-columns: 24px 40px minmax(120px, 3fr) minmax(70px, 2fr) 46px 92px 40px 52px; align-items: center; column-gap: 8px; padding: 0 10px 0 6px; }
+  .cols { flex: none; height: 22px; font: 400 8px/1 var(--pixel); letter-spacing: .1em; color: var(--blue-1); background: linear-gradient(180deg, #1d2631, #121921); border-top: 1px solid #000; border-bottom: 1px solid #000; box-shadow: inset 0 1px 0 rgba(255,255,255,.06); }
+  .cols span:nth-child(n+5), .row span:nth-child(n+5), .cols span:nth-child(2) { text-align: right; }
+  .viewport { flex: 1; overflow-y: auto; overflow-x: hidden; position: relative; outline: none; }
+  .spacer { position: relative; }
+  .row { position: absolute; left: 0; right: 0; height: 24px; font: 12px/24px var(--ui); color: #c8d2dc; cursor: default; border-left: 2px solid transparent; }
+  .row span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row.odd { background: #161e27; }
+  .row:hover { background: #1c2733; }
+  .row.sel { background: linear-gradient(180deg, #3a72aa, #2c5d92); color: #fff; }
+  .row.focus { border-left-color: var(--lime-2); box-shadow: inset 0 0 0 1px rgba(var(--c9cff2e),.45); }
+  .row.playing { color: rgb(var(--cd6ff9e)); background: linear-gradient(90deg, rgba(var(--c5fc410),.28), rgba(var(--c192c0c),.55) 40%, rgba(var(--c192c0c),.35)); text-shadow: 0 0 6px rgba(var(--c9cff2e),.4); }
+  .row.playing.sel { background: linear-gradient(180deg, rgb(var(--c4f8f1d)), rgb(var(--c346e0e))); color: #fff; }
+  .row .n { color: #7d8a99; text-align: right; font-size: 11px; }
+  .row.sel .n, .row.playing .n { color: inherit; }
+  .row .a, .row .q { color: #8e9aa8; font-size: 11.5px; }
+  .row.sel .a, .row.sel .q { color: #dbe7f3; }
+  .row .ind { text-align: center; color: var(--lime-2); }
+  .eq { display: inline-flex; gap: 1px; align-items: flex-end; height: 10px; }
+  .eq i { width: 2px; background: var(--lime-2); box-shadow: 0 0 3px var(--lime-glow); animation: eq .8s ease-in-out infinite alternate; }
+  .eq i:nth-child(2) { animation-delay: -.3s; } .eq i:nth-child(3) { animation-delay: -.55s; }
+  @keyframes eq { from { height: 2px; } to { height: 10px; } }
+  body.paused .eq i { animation-play-state: paused; }
+
+  .grp { position: absolute; left: 0; right: 0; height: 58px; display: grid; grid-template-columns: 50px 1fr auto; gap: 10px; align-items: center; padding: 6px 12px 4px 8px; cursor: default;
+    background: linear-gradient(180deg, #202b37, #17202a); border-top: 1px solid #000; box-shadow: inset 0 1px 0 rgba(255,255,255,.07); }
+  .grp .cv { width: 48px; height: 48px; border-radius: 4px; background: #0b0e11 center/cover no-repeat; box-shadow: 0 0 0 1px #000, 0 0 0 2px rgba(197,205,214,.25), 0 3px 6px rgba(0,0,0,.6); position: relative; overflow: hidden; }
+  .grp .cv::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(255,255,255,.25), rgba(255,255,255,.04) 48%, transparent 49%); }
+  .grp .t1 { font: 700 13px/1.25 var(--ui); color: #eaf1f8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .grp .t1 b { color: var(--lime-1); font-weight: 700; letter-spacing: .02em; text-transform: uppercase; font-size: 11.5px; }
+  .grp .t1 .sep { color: var(--blue-1); margin: 0 6px; }
+  .grp .t2 { font: 11px/1.4 var(--ui); color: #8e9aa8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; gap: 8px; align-items: center; }
+  .grp .t2 .flag { height: 10px; }
+  .grp .yr { font: 700 15px/1 var(--seg); color: var(--lcd-fg); text-shadow: 0 0 6px var(--lime-glow); padding: 4px 6px 3px; border-radius: 4px; background: rgba(0,0,0,.35); border: 1px solid rgba(var(--c9cff2e),.2); }
+  .grp:hover { background: linear-gradient(180deg, #263342, #1a2430); }
+
+  .empty { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; color: var(--text-dim); font: 400 8px/1.8 var(--pixel); letter-spacing: .12em; }
+  .empty b { display: block; font: 900 22px/1.3 var(--display); color: var(--chrome-4); letter-spacing: .05em; }
+  .empty .ibtn { margin: 10px 3px 0; }
+
+  /* context menu */
+  .menu { position: fixed; z-index: 50; min-width: 190px; padding: 4px; border-radius: 8px; background: linear-gradient(180deg, #2a343f, #161d25); border: 1px solid #000; box-shadow: 0 8px 22px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.12); }
+  .menu div { padding: 5px 12px; border-radius: 5px; font: 12px var(--ui); color: #dbe4ee; cursor: pointer; white-space: nowrap; }
+  .menu div:hover { background: linear-gradient(180deg, #3a72aa, #2c5d92); color: #fff; }
+  .menu hr { border: none; border-top: 1px solid rgba(255,255,255,.08); margin: 3px 4px; }
+</style>
+</head>
+<body>
+<div class="top">
+  <div class="capsule"><span class="orb"></span><span id="plname">Playlist</span>
+    <span class="right">
+      <span id="meta"></span>
+      <input class="search" id="q" placeholder="Filter playlist…" spellcheck="false">
+      <span class="ibtn on" id="follow" title="Keep the playing track in view">FOLLOW</span>
+      <span class="ibtn" data-cmd="Search" title="Search the media library (results open as a playlist)">SEARCH</span>
+      <span class="ibtn" data-cmd="Configure" title="Choose the music folders of your media library">+ MUSIC</span>
+    </span>
+  </div>
+  <div class="tabs" id="tabs"></div>
+</div>
+<div class="cols"><span></span><span>#</span><span>TITLE</span><span>ARTIST</span><span>YEAR</span><span>QUALITY</span><span>PLAYS</span><span>TIME</span></div>
+<div class="viewport" id="vp" tabindex="0"><div class="spacer" id="sp"></div></div>
+
+<script src="common.js?v=9"></script><script>Y2K.scopeAccent(document.body, 2); /* MULTI album colours: accent channel 2 */</script>
+<script>
+'use strict';
+const { H, esc, safe } = Y2K;
+const $ = (id) => document.getElementById(id);
+const SEPC = String.fromCharCode(30);
+const RH = 24, GH = 58;
+
+const F = ['$if2(%album artist%,%artist%)', '%album%', "$year($if3($meta(originaldate),%date%,))", '%title%', '%artist%',
+  '%tracknumber%', '%discnumber%', '%totaldiscs%', '%length%', '%length_seconds%',
+  "$if($stricmp($info(encoding),lossless),%codec% $info(bitspersample)/$replace($div(%samplerate%,1000).$left($mod(%samplerate%,1000),1),.0,),%codec%[ %bitrate%k])",
+  '%play_count%', '%path%', '%subsong%', '$directory_path(%path%)', "$meta(label,0)", '$meta(releasecountry)', '%date%'];
+const SCRIPT = F.map((x) => '[' + x + ']').join('$char(30)');
+
+let pl = -1, items = [], rows = [], tops = [], total = 0, filter = '';
+let lastPl = -1, focus = -1, anchor = -1, follow = true, nowKey = '', playingIdx = new Set();
+const selCache = new Map();
+
+/* ------------------------------------------------ data */
+function load(keepScroll) {
+  pl = safe(() => H.activePlaylist, -1);
+  const cnt = safe(() => H.playlistCount, 0);
+  if (pl < 0 && cnt > 0) { pl = Math.min(lastPl < 0 ? 0 : lastPl, cnt - 1); safe(() => { H.activePlaylist = pl; }); }
+  lastPl = pl;
+  items = [];
+  if (pl >= 0) {
+    const l = safe(() => H.getPlaylistItemHandles(pl), 0);
+    if (l) {
+      const raw = safe(() => JSON.parse(H.formatMetaDBHandleList(l, SCRIPT)), []);
+      safe(() => H.releaseMetaDBHandleList(l));
+      items = raw.map((s, i) => {
+        const v = s.split(SEPC);
+        return { i, aa: v[0], album: v[1], year: v[2], title: v[3], artist: v[4], trk: v[5], disc: v[6], tdisc: v[7], len: v[8], lens: +v[9] || 0,
+          q: v[10], plays: v[11], path: v[12], sub: v[13], dir: v[14], label: Y2K.clean(v[15]), cc: v[16], date: v[17],
+          gkey: (v[0] + '|' + v[1] + '|' + v[2] + '|' + (+v[7] > 1 ? v[6] : '')).toLowerCase(), lc: (v[3] + ' ' + v[4] + ' ' + v[0] + ' ' + v[1]).toLowerCase() };
+      });
+    }
+  }
+  selCache.clear();
+  focus = pl >= 0 ? safe(() => H.getFocusedPlaylistItem(pl), -1) : -1;
+  buildRows();
+  if (!keepScroll) $('vp').scrollTop = 0;
+  updatePlaying(true);
+  header();
+  render();
+}
+
+function buildRows() {
+  rows = []; tops = []; total = 0;
+  const f = filter.toLowerCase().trim();
+  let g = null;
+  for (const it of items) {
+    if (f && !it.lc.includes(f)) continue;
+    if (!g || g.key !== it.gkey) {
+      g = { key: it.gkey, aa: it.aa, album: it.album, year: it.year, dir: it.dir, label: it.label, cc: it.cc, q: it.q, disc: +it.tdisc > 1 ? it.disc : '', first: it.i, n: 0, secs: 0, members: [] };
+      rows.push({ g }); tops.push(total); total += GH;
+    }
+    g.n++; g.secs += it.lens; g.members.push(it.i);
+    rows.push({ it }); tops.push(total); total += RH;
+  }
+  $('sp').style.height = total + 'px';
+}
+
+function header() {
+  const name = pl >= 0 ? safe(() => H.getPlaylistName(pl), 'Playlist') : 'No playlist';
+  $('plname').textContent = name;
+  const secs = items.reduce((s, x) => s + x.lens, 0);
+  const onAir = safe(() => H.isPlaying, false) && safe(() => H.playingPlaylist, -2) === pl;
+  $('meta').innerHTML = (onAir ? '<span class="pill lime"><span class="dot"></span>ON AIR</span> ' : '') +
+    '<span class="pill dark">' + items.length.toLocaleString() + ' TRACK' + (items.length === 1 ? '' : 'S') + '</span> <span class="pill dark">' + dur(secs) + '</span>';
+  tabs();
+}
+const dur = (s) => { s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60); return h ? h + 'h ' + String(m).padStart(2, '0') + 'm' : m + 'm ' + String(s % 60).padStart(2, '0') + 's'; };
+
+/* ------------------------------------------------ playlist tabs */
+function tabs() {
+  const n = safe(() => H.playlistCount, 0), playing = safe(() => H.isPlaying, false) ? safe(() => H.playingPlaylist, -1) : -1;
+  let h = '';
+  for (let i = 0; i < n; i++) if (!Y2K.isArtPl(safe(() => H.getPlaylistName(i)))) h += '<div class="tab' + (i === pl ? ' active' : '') + '" data-i="' + i + '" title="' + esc(safe(() => H.getPlaylistName(i))) + '">' + (i === playing ? '<span class="np"></span>' : '') + esc(safe(() => H.getPlaylistName(i))) + '</div>';
+  h += '<div class="tab add" id="newpl" title="New playlist">+</div>';
+  $('tabs').innerHTML = h;
+  $('tabs').querySelectorAll('.tab[data-i]').forEach((t) => {
+    const i = +t.dataset.i;
+    t.onclick = () => { safe(() => { H.activePlaylist = i; }); };
+    t.ondblclick = () => rename(t, i);
+    t.oncontextmenu = (e) => { e.preventDefault(); menu(e.clientX, e.clientY, [
+      ['Rename', () => rename(t, i)],
+      ['Duplicate', () => safe(() => H.duplicatePlaylist(i, safe(() => H.getPlaylistName(i)) + ' (copy)'))],
+      ['New playlist', newPlaylist], null,
+      ['Delete playlist', () => deletePl(i)],
+    ]); };
+    t.onauxclick = (e) => { if (e.button === 1) deletePl(i); };
+  });
+  $('newpl').onclick = newPlaylist;
+  const act = $('tabs').querySelector('.tab.active'); if (act) act.scrollIntoView({ inline: 'nearest' });
+}
+function deletePl(i) { lastPl = Math.max(0, i - 1); safe(() => H.deletePlaylist(i)); setTimeout(() => load(false), 120); }
+function newPlaylist() { const i = safe(() => H.createPlaylist(H.playlistCount, 'New Playlist'), -1); if (i >= 0) safe(() => { H.activePlaylist = i; }); setTimeout(() => { const t = $('tabs').querySelector('.tab[data-i="' + i + '"]'); if (t) rename(t, i); }, 150); }
+function rename(tabEl, i) {
+  const old = safe(() => H.getPlaylistName(i));
+  tabEl.innerHTML = '<input value="' + esc(old) + '">';
+  const inp = tabEl.querySelector('input'); inp.focus(); inp.select();
+  const done = (ok) => { if (ok && inp.value.trim()) safe(() => H.setPlaylistName(i, inp.value.trim())); tabs(); header(); };
+  inp.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') done(true); if (e.key === 'Escape') done(false); };
+  inp.onblur = () => done(true);
+  inp.onclick = (e) => e.stopPropagation();
+}
+
+/* ------------------------------------------------ rendering (virtualised) */
+let renderQueued = false;
+function render() { if (!renderQueued) { renderQueued = true; requestAnimationFrame(doRender); } }
+function isSel(i) { if (!selCache.has(i)) selCache.set(i, !!safe(() => H.isPlaylistItemSelected(pl, i), false)); return selCache.get(i); }
+function rowAt(y) { let lo = 0, hi = tops.length - 1; while (lo < hi) { const m = (lo + hi + 1) >> 1; if (tops[m] <= y) lo = m; else hi = m - 1; } return lo; }
+function doRender() {
+  renderQueued = false;
+  const vp = $('vp'), sp = $('sp');
+  if (!rows.length) {
+    sp.innerHTML = '<div class="empty"><div><b>' + (filter ? 'NO MATCHES' : 'EMPTY PLAYLIST') + '</b>' + (filter ? 'Nothing matches “' + esc(filter) + '”' : 'Double-click an album in the Media Library panel,<br>or use File &gt; Add files / Add folder in the menu bar<br><span class="ibtn" data-cmd="Configure">+ MUSIC FOLDERS</span>') + '</div></div>';
+    wireCmds(sp); return;
+  }
+  const y0 = vp.scrollTop, y1 = y0 + vp.clientHeight;
+  let a = Math.max(0, rowAt(y0) - 6), b = Math.min(rows.length - 1, rowAt(y1) + 6);
+  let h = '';
+  for (let r = a; r <= b; r++) {
+    const row = rows[r], top = tops[r];
+    if (row.g) {
+      const g = row.g;
+      h += '<div class="grp" data-g="' + r + '" style="top:' + top + 'px"><div class="cv" data-dir="' + esc(g.dir) + '" data-i="' + g.first + '"></div><div style="min-width:0">' +
+        '<div class="t1"><b>' + esc(g.aa || 'Unknown artist') + '</b><span class="sep">▸</span>' + esc(g.album || '(no album)') + (g.disc ? ' <span style="color:var(--blue-1)">· DISC ' + esc(g.disc) + '</span>' : '') + '</div>' +
+        '<div class="t2">' + [g.label && esc(g.label), g.cc && (Y2K.flagHTML(g.cc) + ' ' + esc(g.cc.toUpperCase())), esc(g.q), g.n + ' track' + (g.n === 1 ? '' : 's'), dur(g.secs)].filter(Boolean).join('<span style="color:#3d4753">•</span>') + '</div></div>' +
+        (g.year ? '<span class="yr">' + esc(g.year) + '</span>' : '<span></span>') + '</div>';
+    } else {
+      const it = row.it, i = it.i;
+      const cls = ['row', (r & 1) ? 'odd' : '', isSel(i) ? 'sel' : '', i === focus ? 'focus' : '', playingIdx.has(i) ? 'playing' : ''].join(' ');
+      const showArtist = it.artist && it.artist.toLowerCase() !== (it.aa || '').toLowerCase();
+      h += '<div class="' + cls + '" data-i="' + i + '" style="top:' + top + 'px">' +
+        '<span class="ind">' + (playingIdx.has(i) ? '<span class="eq"><i></i><i></i><i></i></span>' : '') + '</span>' +
+        '<span class="n">' + esc(it.trk) + '</span><span>' + esc(it.title || it.path.split(/[\x5c/]/).pop()) + '</span>' +
+        '<span class="a">' + (showArtist ? esc(it.artist) : '') + '</span><span class="a">' + esc(it.year) + '</span>' +
+        '<span class="q">' + esc(it.q) + '</span><span class="a">' + esc(it.plays && it.plays !== '0' ? it.plays : '') + '</span><span>' + esc(it.len) + '</span></div>';
+    }
+  }
+  sp.innerHTML = h;
+  sp.querySelectorAll('.cv[data-dir]').forEach((el) => {
+    const d = el.dataset.dir; if (!d) return;
+    const fi = +el.dataset.i, it = items[fi];
+    Y2K.thumb(Y2K.toFwd(d), 96, it ? { pl, idx: fi, path: it.path } : '').then((u) => { if (u && el.isConnected) el.style.backgroundImage = 'url("' + u + '")'; });
+  });
+}
+$('vp').addEventListener('scroll', render, { passive: true });
+window.addEventListener('resize', render);
+
+/* ------------------------------------------------ selection & focus */
+function visibleIndices() { return rows.filter((r) => r.it).map((r) => r.it.i); }
+function setFocus(i, ensure = true) {
+  focus = i;
+  safe(() => H.setFocusedPlaylistItem(pl, i));
+  if (ensure) ensureVisible(i);
+  render();
+}
+function ensureVisible(i) {
+  const r = rows.findIndex((x) => x.it && x.it.i === i); if (r < 0) return;
+  const vp = $('vp'), top = tops[r];
+  const gTop = r > 0 && rows[r - 1].g ? tops[r - 1] : top;
+  if (gTop < vp.scrollTop) vp.scrollTop = gTop;
+  else if (top + RH > vp.scrollTop + vp.clientHeight) vp.scrollTop = top + RH - vp.clientHeight;
+}
+function selectOnly(list) {
+  safe(() => H.clearPlaylistSelection(pl));
+  selCache.clear();
+  for (const i of list) { safe(() => H.selectPlaylistItem(pl, i)); selCache.set(i, true); }
+  for (const it of items) if (!selCache.has(it.i)) selCache.set(it.i, false);
+}
+function toggle(i) { const s = isSel(i); safe(() => s ? H.deselectPlaylistItem(pl, i) : H.selectPlaylistItem(pl, i)); selCache.set(i, !s); }
+function rangeSel(a, b) {
+  const vis = visibleIndices(), ia = vis.indexOf(a), ib = vis.indexOf(b);
+  if (ia < 0 || ib < 0) return selectOnly([b]);
+  selectOnly(vis.slice(Math.min(ia, ib), Math.max(ia, ib) + 1));
+}
+function selectedIndices() { return items.filter((x) => isSel(x.i)).map((x) => x.i); }
+
+// Double-clicks are detected on the second press (e.detail === 2): the first press re-renders
+// the rows, so a native 'dblclick' often lands on a replaced element and never reaches a row.
+let lastDown = { i: -1, t: 0 };
+const playItem = (i) => { safe(() => { if (H.activePlaylist !== pl) H.activePlaylist = pl; }); safe(() => H.executePlaylistDefaultAction(pl, i)); };
+$('sp').addEventListener('mousedown', (e) => {
+  $('vp').focus();
+  const rowEl = e.target.closest('.row'), grpEl = e.target.closest('.grp');
+  const hit = rowEl ? +rowEl.dataset.i : grpEl ? rows[+grpEl.dataset.g].g.first : -1;
+  if (e.button === 0 && e.detail >= 2 && !e.shiftKey && !e.ctrlKey && hit >= 0 && hit === lastDown.i && Date.now() - lastDown.t < 700) {
+    lastDown = { i: -1, t: 0 }; e.preventDefault(); playItem(hit); return;
+  }
+  lastDown = { i: hit, t: Date.now() };
+  if (rowEl) {
+    const i = +rowEl.dataset.i;
+    if (e.button === 2 && isSel(i)) { setFocus(i, false); return; }
+    if (e.shiftKey && anchor >= 0) rangeSel(anchor, i);
+    else if (e.ctrlKey) { toggle(i); anchor = i; }
+    else { selectOnly([i]); anchor = i; }
+    setFocus(i, false);
+  } else if (grpEl) {
+    const g = rows[+grpEl.dataset.g].g;
+    if (e.ctrlKey) g.members.forEach((i) => { if (!isSel(i)) toggle(i); }); else selectOnly(g.members);
+    anchor = g.members[0]; setFocus(g.members[0], false);
+  }
+});
+
+$('vp').addEventListener('keydown', (e) => {
+  const vis = visibleIndices(); if (!vis.length) return;
+  let k = vis.indexOf(focus); const page = Math.max(1, Math.floor($('vp').clientHeight / RH) - 2);
+  const move = (to) => { to = Math.max(0, Math.min(vis.length - 1, to)); const i = vis[to]; if (e.shiftKey) rangeSel(anchor >= 0 ? anchor : i, i); else { selectOnly([i]); anchor = i; } setFocus(i); e.preventDefault(); };
+  switch (e.key) {
+    case 'ArrowDown': move(k + 1); break;
+    case 'ArrowUp': move(k - 1); break;
+    case 'PageDown': move(k + page); break;
+    case 'PageUp': move(k - page); break;
+    case 'Home': move(0); break;
+    case 'End': move(vis.length - 1); break;
+    case 'Enter': if (focus >= 0) playItem(focus); e.preventDefault(); break;
+    case 'Delete': removeSelected(); e.preventDefault(); break;
+    case 'a': case 'A': if (e.ctrlKey) { selectOnly(vis); render(); e.preventDefault(); } break;
+    case 'f': case 'F': if (e.ctrlKey) { $('q').focus(); e.preventDefault(); } break;
+  }
+});
+function removeSelected() { safe(() => H.removeSelectedPlaylistItems(pl)); }
+
+/* ------------------------------------------------ context menu */
+let menuEl = null;
+function menu(x, y, entries) {
+  closeMenu();
+  menuEl = document.createElement('div'); menuEl.className = 'menu';
+  for (const en of entries) {
+    if (!en) { menuEl.appendChild(document.createElement('hr')); continue; }
+    const d = document.createElement('div'); d.textContent = en[0]; d.onclick = () => { closeMenu(); en[1](); }; menuEl.appendChild(d);
+  }
+  document.body.appendChild(menuEl);
+  const r = menuEl.getBoundingClientRect();
+  menuEl.style.left = Math.min(x, innerWidth - r.width - 4) + 'px'; menuEl.style.top = Math.min(y, innerHeight - r.height - 4) + 'px';
+}
+function closeMenu() { if (menuEl) { menuEl.remove(); menuEl = null; } }
+document.addEventListener('mousedown', (e) => { if (menuEl && !menuEl.contains(e.target)) closeMenu(); });
+$('sp').addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  const rowEl = e.target.closest('.row, .grp'); if (!rowEl) return;
+  const sel = selectedIndices(); if (!sel.length) return;
+  const it = items[focus] || items[sel[0]];
+  menu(e.clientX, e.clientY, [
+    ['▶  Play', () => playItem(sel[0])],
+    ['Add to playback queue', () => sel.forEach((i) => safe(() => H.addPlaylistItemToPlaybackQueue(pl, i)))],
+    null,
+    ['Send to new playlist', () => { const paths = sel.map((i) => items[i].path); const n = safe(() => H.createPlaylist(H.playlistCount, 'New Playlist'), -1); if (n >= 0) { Y2K.addPaths(n, paths); safe(() => { H.activePlaylist = n; }); } }],
+    ['Remove from playlist', removeSelected],
+    ['Crop (keep only selection)', () => safe(() => H.removeUnselectedPlaylistItems(pl))],
+    null,
+    ['Open containing folder', () => it && Y2K.openFile(Y2K.toFwd(it.dir))],
+  ]);
+});
+
+/* ------------------------------------------------ now playing */
+function updatePlaying(quiet) {
+  const playing = safe(() => H.isPlaying, false);
+  document.body.classList.toggle('paused', safe(() => H.isPaused, false));
+  const key = playing ? safe(() => H.nowPlaying('[%path%]|[%subsong%]')) : '';
+  const onThis = playing && safe(() => H.playingPlaylist, -2) === pl;
+  const set = new Set();
+  if (onThis && key) for (const it of items) if (it.path + '|' + it.sub === key) set.add(it.i);
+  const changed = key !== nowKey || set.size !== playingIdx.size || [...set].some((i) => !playingIdx.has(i));
+  playingIdx = set;
+  if (changed) {
+    nowKey = key;
+    if (!quiet && follow && set.size) ensureVisible([...set][0]);
+    header(); render();
+  }
+}
+
+/* ------------------------------------------------ wiring */
+function wireCmds(root) { root.querySelectorAll('[data-cmd]').forEach((el) => { el.onclick = () => Y2K.runCommand(el.dataset.cmd); }); }
+wireCmds(document);
+$('follow').onclick = () => { follow = !follow; $('follow').classList.toggle('on', follow); if (follow && playingIdx.size) ensureVisible([...playingIdx][0]); safe(() => localStorage.setItem('pl:follow', follow ? '1' : '0')); };
+if (safe(() => localStorage.getItem('pl:follow')) === '0') { follow = false; $('follow').classList.remove('on'); }
+$('q').addEventListener('input', Y2K.debounce(() => { filter = $('q').value; buildRows(); $('vp').scrollTop = 0; render(); }, 120));
+$('q').addEventListener('keydown', (e) => { if (e.key === 'Escape') { $('q').value = ''; filter = ''; buildRows(); render(); } e.stopPropagation(); });
+$('plname').ondblclick = () => { const t = $('tabs').querySelector('.tab.active'); if (t) rename(t, pl); };
+
+const reload = Y2K.debounce(() => load(true), 150);
+const reloadAll = Y2K.debounce(() => load(false), 60);
+fb2k.on('playlist:activated', reloadAll);
+['playlist:itemsAdded', 'playlist:itemsRemoved', 'playlist:itemsReordered', 'playlist:itemsReplaced', 'playlist:itemsModified', 'playlist:itemsModifiedFromPlayback']
+  .forEach((ev) => fb2k.on(ev, (p) => { if (!p || p.playlist === undefined || p.playlist === pl) reload(); }));
+['playlist:created', 'playlist:removed', 'playlist:renamed', 'playlist:reordered'].forEach((ev) => fb2k.on(ev, Y2K.debounce(() => { if (safe(() => H.activePlaylist, -1) !== pl) load(false); else { header(); } }, 80)));
+fb2k.on('playlist:selectionChanged', (p) => { if (!p || p.playlist === pl) { selCache.clear(); render(); } });
+fb2k.on('playlist:focusChanged', (p) => { if (p && p.playlist === pl && p.to !== focus) { focus = p.to; render(); } });
+fb2k.on('playlist:ensureVisible', (p) => { if (p && p.playlist === pl) ensureVisible(p.item); });
+['playback:trackChanged', 'playback:starting', 'playback:stopped', 'playback:paused'].forEach((ev) => fb2k.on(ev, Y2K.debounce(() => updatePlaying(false), 100)));
+setInterval(() => updatePlaying(false), 1500);
+document.addEventListener('dragover', (e) => e.preventDefault());
+document.addEventListener('drop', (e) => e.preventDefault());
+load(false);
+</script>
+</body>
+</html>

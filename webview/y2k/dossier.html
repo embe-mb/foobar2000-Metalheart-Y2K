@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Metalheart Dossier</title>
+<link rel="stylesheet" href="common.css?v=9">
+<style>
+  body { overflow-y: auto; overflow-x: hidden; padding: 8px 8px 14px; }
+  .hero { display: grid; grid-template-columns: 74px 1fr; gap: 10px; padding: 8px; margin-bottom: 10px; align-items: center; }
+  .hero .thumb { width: 74px; height: 74px; border-radius: 5px; background: #0b0e11 center/cover no-repeat; box-shadow: 0 0 0 1px #000, 0 0 0 3px rgba(197,205,214,.4), 0 4px 10px rgba(0,0,0,.6); position: relative; overflow: hidden; }
+  .hero .thumb::after { content: ""; position: absolute; inset: 0; background: linear-gradient(120deg, rgba(255,255,255,.3), transparent 40%); }
+  .hero .t { font: 800 15px/1.2 var(--display); color: #1a222b; text-shadow: 0 1px 0 rgba(255,255,255,.7); word-break: break-word; }
+  .hero .a { font: 700 12px/1.3 var(--ui); color: #2a3440; margin-top: 2px; }
+  .hero .s { font: 400 8px/1 var(--pixel); letter-spacing: .12em; color: #4b5562; margin-top: 6px; display: flex; gap: 6px; align-items: center; }
+  .hero .s i { width: 7px; height: 7px; border-radius: 50%; background: var(--lime-3); box-shadow: 0 0 5px var(--lime-glow); }
+  .hero .s.sel i { background: var(--blue-2); box-shadow: 0 0 5px rgba(74,134,197,.8); }
+
+  .box { margin-bottom: 10px; }
+  .box .body {
+    margin: -2px 3px 0; padding: 9px 10px 10px; border-radius: 0 0 8px 8px;
+    background: linear-gradient(180deg, rgba(28,36,45,.92), rgba(16,21,27,.92));
+    border: 1px solid #000; border-top: none;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.05), 0 4px 10px rgba(0,0,0,.4);
+  }
+  .box .capsule { cursor: pointer; }
+  .box.collapsed .body { display: none; }
+  .box .capsule .count { margin-left: auto; font: 400 8px/1 var(--pixel); opacity: .8; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .chips .pill { height: 16px; font-size: 8px; }
+
+  .barcode-card {
+    margin: 10px auto 2px; width: max-content; max-width: 100%; padding: 10px 14px 6px; border-radius: 6px;
+    background: linear-gradient(180deg, #ffffff, #eef1f4); box-shadow: 0 0 0 1px #000, 0 0 0 3px rgba(197,205,214,.35), 0 6px 14px rgba(0,0,0,.6);
+    text-align: center; position: relative;
+  }
+  .barcode-card svg { display: block; max-width: 100%; height: auto; }
+  .barcode-card .lbl { font: 400 8px/1 var(--pixel); letter-spacing: .14em; color: #5b6673; margin-top: 4px; }
+  .barcode-card .warn { color: #b25a00; }
+
+  .btnrow { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .btn {
+    height: 20px; padding: 0 9px; border-radius: 10px; cursor: pointer; display: inline-flex; align-items: center;
+    font: 400 8px/1 var(--pixel); letter-spacing: .08em; text-transform: uppercase; color: #fff; text-shadow: 0 1px 0 rgba(0,0,0,.5);
+    background: linear-gradient(180deg, rgba(255,255,255,.5), rgba(255,255,255,.08) 50%, transparent 51%), linear-gradient(180deg, var(--blue-2), var(--blue-4));
+    border: 1px solid #0d223a;
+  }
+  .btn.lime { color: rgb(var(--c0b1c01)); text-shadow: 0 1px 0 rgba(255,255,255,.5); background: linear-gradient(180deg, rgba(255,255,255,.6), rgba(255,255,255,.1) 50%, transparent 51%), linear-gradient(180deg, var(--lime-1), var(--lime-3)); border-color: var(--lime-4); }
+  .btn:hover { filter: brightness(1.15); }
+
+  .stat { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .stat .cell { text-align: center; padding: 6px 4px; border-radius: 6px; background: rgba(0,0,0,.35); border: 1px solid rgba(var(--c9cff2e),.15); }
+  .stat .num { font: 700 18px/1 var(--seg); color: var(--lcd-fg); text-shadow: 0 0 6px var(--lime-glow); }
+  .stat .lab { font: 400 8px/1 var(--pixel); letter-spacing: .12em; color: var(--text-dim); margin-top: 5px; }
+  .stars { color: var(--lime-2); letter-spacing: 2px; text-shadow: 0 0 6px var(--lime-glow); }
+
+  .empty { padding: 30px 10px; text-align: center; color: var(--text-dim); font: 400 8px/1.6 var(--pixel); letter-spacing: .1em; }
+  .empty b { display: block; font: 900 22px/1.2 var(--display); color: var(--chrome-4); margin-bottom: 6px; }
+  .ripok { color: var(--lime-1); font-weight: 700; }
+  .ripbad { color: var(--amber); font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="backdrop"></div>
+<div id="root"></div>
+
+<script src="common.js?v=9"></script>
+<script>
+'use strict';
+const { esc, safe } = Y2K;
+let cur = null;
+const collapsed = new Set(JSON.parse(safe(() => localStorage.getItem('dossier:collapsed')) || '[]'));
+
+const kvRow = (label, html) => (html ? '<dt>' + esc(label) + '</dt><dd>' + html + '</dd>' : '');
+const txt = (v) => (v ? esc(v).split('; ').join(' · ') : '');
+const mono = (v) => (v ? '<span style="font-family:Consolas,monospace;font-size:11px;color:var(--chrome-2)">' + esc(v) + '</span>' : '');
+const link = (label, url) => '<a data-url="' + esc(url) + '">' + esc(label) + '</a>';
+
+function box(id, title, body, opts = {}) {
+  if (!body || !body.trim()) return '';
+  return '<section class="box' + (collapsed.has(id) ? ' collapsed' : '') + '" data-id="' + id + '">' +
+    '<div class="capsule' + (opts.lime ? ' lime' : '') + '"><span class="orb"></span>' + esc(title) +
+    (opts.count ? '<span class="count">' + esc(opts.count) + '</span>' : '') +
+    '<span class="grip"' + (opts.count ? ' style="margin-left:8px"' : '') + '><i></i><i></i><i></i></span></div>' +
+    '<div class="body">' + body + '</div></section>';
+}
+const kv = (rows) => { const r = rows.join(''); return r ? '<dl class="kv">' + r + '</dl>' : ''; };
+
+function dateRange(t) {
+  const d = t.date, o = t.originaldate || t.originalyear;
+  if (o && d && o.slice(0, 4) !== d.slice(0, 4)) return esc(d) + ' <span class="muted">(orig. ' + esc(o) + ')</span>';
+  return esc(d || o || '');
+}
+
+function render() {
+  const t = Y2K.getTrack();
+  cur = t;
+  const root = document.getElementById('root');
+  if (t._src === 'none') {
+    root.innerHTML = '<div class="empty"><b>NO SIGNAL</b>Play or select a track to read its dossier</div>';
+    return;
+  }
+  const art = Y2K.resolveArt(t);
+  const q = Y2K.qualityOf(t);
+  let h = '';
+
+  // ---------- hero
+  h += '<div class="hero chrome screws"><div class="thumb" style="background-image:url(\'' + (art.src || '') + '\')"></div><div>' +
+    '<div class="t">' + esc(t.title || t.filename) + '</div>' +
+    '<div class="a">' + esc(t.artist) + (t.album ? ' — ' + esc(t.album) : '') + '</div>' +
+    '<div class="s' + (t._src === 'playing' ? '' : ' sel') + '"><i></i>' + (t._src === 'playing' ? (t._paused ? 'PAUSED' : 'NOW PLAYING') : 'SELECTED TRACK') + '</div></div></div>';
+
+  // ---------- release
+  const cc = (t.releasecountry || '').trim();
+  const bc = t.barcode ? Y2K.barcodeSVG(t.barcode, { module: 2, height: 54 }) : '';
+  let rel = kv([
+    kvRow('Album', esc(t.album)),
+    kvRow('Album artist', txt(t.albumartist)),
+    kvRow('Released', dateRange(t)),
+    kvRow('Label', txt(t.label)),
+    kvRow('Catalog #', mono(t.catalognumber)),
+    kvRow('Country', cc ? Y2K.flagHTML(cc) + ' ' + esc(Y2K.countryName(cc)) + ' <span class="muted">(' + esc(cc.toUpperCase()) + ')</span>' : ''),
+    kvRow('Type', txt(t.releasetype)),
+    kvRow('Status', txt(t.releasestatus)),
+    kvRow('Media', txt(t.media)),
+    kvRow('Disc', t.discnumber ? esc(t.discnumber) + (t.totaldiscs ? ' of ' + esc(t.totaldiscs) : '') + (t.discsubtitle ? ' — ' + esc(t.discsubtitle) : '') : ''),
+    kvRow('Tracks', esc(t.totaltracks)),
+    kvRow('Script', esc(t.script)),
+    kvRow('Language', esc(t.language)),
+    kvRow('ASIN', mono(t.asin)),
+    kvRow('Barcode', bc ? '' : mono(t.barcode)),
+  ]);
+  if (bc) rel += '<div class="barcode-card">' + bc.svg + '<div class="lbl">' + bc.kind + (bc.valid ? '' : ' · <span class="warn">CHECK DIGIT MISMATCH</span>') + '</div></div>';
+  h += box('release', 'Release', rel);
+
+  // ---------- track
+  const genres = t.list('genre').concat(t.list('style'));
+  h += box('track', 'Track', kv([
+    kvRow('Title', esc(t.title)),
+    kvRow('Artist', esc(t.artist)),
+    kvRow('Artists', t.list('artists').length > 1 ? t.list('artists').map(esc).join(' · ') : ''),
+    kvRow('Track', t.tracknumber ? esc(t.tracknumber) + (t.totaltracks ? ' / ' + esc(t.totaltracks) : '') : ''),
+    kvRow('Length', esc(t.length)),
+    kvRow('Genre', genres.length ? '<div class="chips">' + genres.map((g) => '<span class="pill dark">' + esc(g) + '</span>').join('') + '</div>' : ''),
+    kvRow('Mood', txt(t.mood)),
+    kvRow('BPM', esc(t.bpm)),
+    kvRow('Key', esc(t.key)),
+    kvRow('ISRC', mono(t.isrc)),
+    kvRow('Work', txt(t.work)),
+    kvRow('Movement', txt(t.movement)),
+    kvRow('Grouping', txt(t.grouping)),
+  ]));
+
+  // ---------- credits
+  h += box('credits', 'Credits', kv([
+    kvRow('Composer', txt(t.composer)), kvRow('Lyricist', txt(t.lyricist)), kvRow('Writer', txt(t.writer)),
+    kvRow('Arranger', txt(t.arranger)), kvRow('Producer', txt(t.producer)), kvRow('Engineer', txt(t.engineer)),
+    kvRow('Mixer', txt(t.mixer)), kvRow('DJ-mixer', txt(t.djmixer)), kvRow('Remixer', txt(t.remixer)),
+    kvRow('Conductor', txt(t.conductor)), kvRow('Performer', txt(t.performer)),
+    kvRow('Copyright', txt(t.copyright)), kvRow('License', txt(t.license)),
+  ]));
+
+  // ---------- rip log
+  const rip = Y2K.findRipLog(t);
+  if (rip) {
+    let r = kv([
+      kvRow('Source', '<span class="ripok">Compact Disc rip</span>'),
+      kvRow('Ripper', esc(rip.ripper + (rip.version ? ' ' + rip.version : ''))),
+      kvRow('Ripped', esc(rip.date)),
+      kvRow('Drive', esc(rip.drive)),
+      kvRow('Read mode', esc(rip.readMode)),
+      kvRow('Offset', esc(rip.offset)),
+      kvRow('C2 pointers', esc(rip.c2)),
+      kvRow('Gap handling', esc(rip.gap)),
+      kvRow('AccurateRip', rip.ar ? '<span class="' + (/accurately ripped/i.test(rip.ar) && !/out of/i.test(rip.ar) ? 'ripok' : 'ripbad') + '">' + esc(rip.ar) + '</span>' : ''),
+      kvRow('Errors', rip.errors ? '<span class="' + (rip.errors === 'No errors' ? 'ripok' : 'ripbad') + '">' + esc(rip.errors) + '</span>' : ''),
+      kvRow('Checksum', esc(rip.checksum)),
+      kvRow('This track', rip.track ? [rip.track.ar, rip.track.copyCRC && 'CRC ' + rip.track.copyCRC, rip.track.peak && 'peak ' + rip.track.peak, rip.track.status].filter(Boolean).map(esc).join(' · ') : ''),
+      kvRow('Log file', esc(rip.file) + (rip.utf16 ? ' <span class="muted">(UTF-16 — open to read the full report)</span>' : '')),
+    ]);
+    r += '<div class="btnrow"><span class="btn lime" id="openLog">View rip log</span></div>';
+    h += box('rip', 'CD Rip · Verified Source', r, { lime: true });
+  }
+
+  // ---------- audio
+  const rg = [t.rg_tg && 'track ' + t.rg_tg, t.rg_ag && 'album ' + t.rg_ag].filter(Boolean).join(' · ');
+  const rgp = [t.rg_tp && 'track ' + t.rg_tp, t.rg_ap && 'album ' + t.rg_ap].filter(Boolean).join(' · ');
+  h += box('audio', 'Audio · File', kv([
+    kvRow('Codec', esc(t.codec + (t.codecprofile ? ' (' + t.codecprofile + ')' : '')) + (q.lossless ? ' <span class="pill blue" style="height:14px;font-size:7px;vertical-align:1px">' + (q.hires ? 'HI-RES ' : '') + 'LOSSLESS</span>' : '')),
+    kvRow('Resolution', [q.bits && q.bits + '-bit', q.khz && q.khz + ' kHz', t.channels].filter(Boolean).map(esc).join(' · ')),
+    kvRow('Bitrate', t.bitrate ? esc(t.bitrate) + ' kbps' : ''),
+    kvRow('Encoder', esc(t.tool || t.encodedby)),
+    kvRow('Settings', esc(t.encodersettings)),
+    kvRow('Size', esc(t.filesize)),
+    kvRow('ReplayGain', esc(rg)),
+    kvRow('Peak', esc(rgp)),
+    kvRow('MD5', mono(t.md5)),
+    kvRow('Artwork', esc(art.origin === 'none' ? 'none found' : art.origin)),
+    kvRow('File', esc(t.filename)),
+    kvRow('Folder', t._local ? '<a data-open="' + esc(t._dirFwd) + '">' + esc(t.dir) + '</a>' : esc(t.path)),
+  ]));
+
+  // ---------- musicbrainz
+  const mbl = (kind, ids) => (ids ? ids.split(/;\s*/).filter(Boolean).map((id) => link(id, 'https://musicbrainz.org/' + kind + '/' + id)).join('<br>') : '');
+  let mbBody = kv([
+    kvRow('Release', mbl('release', t.mb_release)),
+    kvRow('Release group', mbl('release-group', t.mb_releasegroup)),
+    kvRow('Recording', mbl('recording', t.mb_recording)),
+    kvRow('Release track', mbl('track', t.mb_releasetrack)),
+    kvRow('Artist', mbl('artist', t.mb_artist)),
+    kvRow('Album artist', mbl('artist', t.mb_albumartist)),
+    kvRow('Work', mbl('work', t.mb_work)),
+    kvRow('Disc ID', t.mb_discid ? link(t.mb_discid, 'https://musicbrainz.org/cdtoc/' + t.mb_discid) : ''),
+    kvRow('AcoustID', t.acoustid ? link(t.acoustid, 'https://acoustid.org/track/' + t.acoustid) : ''),
+  ]);
+  if (mbBody) mbBody = '<div style="font-family:Consolas,monospace;font-size:10.5px">' + mbBody + '</div>';
+  h += box('mb', 'MusicBrainz', mbBody, { count: t.mb_release ? 'PICARD TAGGED' : '' });
+
+  // ---------- listening
+  const stars = +t.rating ? '<span class="stars">' + '★'.repeat(+t.rating) + '<span style="opacity:.25">' + '★'.repeat(Math.max(0, 5 - +t.rating)) + '</span></span>' : '';
+  h += box('stats', 'Listening', '<div class="stat">' +
+    '<div class="cell"><div class="num">' + esc(t.playcount || '0') + '</div><div class="lab">PLAYS</div></div>' +
+    '<div class="cell"><div class="num" style="font-size:12px;font-family:var(--ui)">' + esc((t.lastplayed || '—').slice(0, 10)) + '</div><div class="lab">LAST PLAYED</div></div>' +
+    '<div class="cell"><div class="num" style="font-size:12px;font-family:var(--ui)">' + esc((t.added || '—').slice(0, 10)) + '</div><div class="lab">ADDED</div></div>' +
+    '</div>' + (stars ? '<div style="text-align:center;margin-top:8px;font-size:16px">' + stars + '</div>' : ''));
+
+  // ---------- comment
+  if (t.comment) h += box('comment', 'Comment', '<div style="white-space:pre-wrap;user-select:text">' + esc(t.comment) + '</div>');
+
+  root.innerHTML = h;
+
+  // wiring
+  root.querySelectorAll('.box .capsule').forEach((c) => c.onclick = () => {
+    const b = c.parentElement, id = b.dataset.id;
+    b.classList.toggle('collapsed');
+    b.classList.contains('collapsed') ? collapsed.add(id) : collapsed.delete(id);
+    safe(() => localStorage.setItem('dossier:collapsed', JSON.stringify([...collapsed])));
+  });
+  root.querySelectorAll('[data-url]').forEach((a) => a.onclick = () => Y2K.openUrl(a.dataset.url));
+  root.querySelectorAll('[data-open]').forEach((a) => a.onclick = () => Y2K.openFile(a.dataset.open));
+  const ol = document.getElementById('openLog'); if (ol) ol.onclick = () => Y2K.openFile(rip.path);
+}
+
+Y2K.onTrackContextChange(() => render());
+fb2k.on('playback:paused', () => render());
+render();
+</script>
+</body>
+</html>

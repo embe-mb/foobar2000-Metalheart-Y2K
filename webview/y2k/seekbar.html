@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Metalheart Seekbar</title>
+<link rel="stylesheet" href="common.css?v=9">
+<style>
+  body { padding: 3px 8px 4px; background: #0b0f14; overflow: hidden; }
+  /* an LCD strip like the deck's screen: tinted glass, inner shadow, gloss on the top half */
+  .bar { position: relative; height: 100%; border-radius: 8px; overflow: hidden; cursor: pointer;
+    background: linear-gradient(180deg, var(--lcd-bg-0), var(--lcd-bg-1)); border: 1px solid #000;
+    box-shadow: inset 0 2px 8px rgba(0,0,0,.9), 0 0 0 1px rgba(197,205,214,.12), 0 1px 0 rgba(255,255,255,.06); }
+  .bar::after { content: ""; position: absolute; inset: 0; pointer-events: none; border-radius: 8px;
+    background: linear-gradient(180deg, rgba(255,255,255,.07), rgba(255,255,255,.015) 48%, transparent 50%); }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .status { position: absolute; left: 8px; top: 5px; font: 400 7px/1 var(--pixel); letter-spacing: .14em; color: var(--lcd-fg-dim); pointer-events: none; z-index: 1; }
+  .tip { position: absolute; top: 50%; transform: translate(-50%, -50%); padding: 3px 6px 2px; border-radius: 4px; pointer-events: none; z-index: 2; display: none;
+    font: 700 11px/1 var(--seg); letter-spacing: .05em; color: var(--lime-0); background: rgba(5,8,5,.85); border: 1px solid rgba(var(--c9cff2e), .45);
+    box-shadow: 0 0 8px rgba(var(--c9cff2e), .35); white-space: nowrap; }
+  .tip small { font: 400 7px/1 var(--pixel); color: var(--lcd-fg-dim); margin-left: 5px; letter-spacing: .08em; }
+  .bar.hover .tip { display: block; }
+</style>
+</head>
+<body>
+<div class="bar" id="bar"><canvas id="cv"></canvas><span class="status" id="status"></span><div class="tip" id="tip"></div></div>
+<script src="common.js?v=9"></script>
+<script>
+'use strict';
+/* METALHEART // Y2K waveform seek bar.
+   Supported files are copied into ./wavecache by a hidden `cmd copy` (the panel's own web server can then fetch
+   them), decoded with Web Audio at 8 kHz and reduced to N peak/RMS buckets per channel. Everything else
+   (ALAC, APE, WavPack, DSD, cue-sheet tracks, streams...) is built live from the visualisation stream while it plays.
+   Finished waveforms are cached in IndexedDB, keyed by path|subsong|size|length. */
+const { H, safe } = Y2K;
+Y2K.fadePriority(); // theme fades run at full frame rate here
+const $ = (id) => document.getElementById(id);
+const BS = String.fromCharCode(92);
+const N = 1600;
+const DECODABLE = /^(flac|mp3|m4a|mp4|aac|ogg|oga|opus|wav|wave|webm|weba)$/;
+
+/* ---------------- settings (shared with CUSTOMIZE DECK, stored in the deck's 'deck:cfg') ---------------- */
+const SEEK_DEF = { seekStyle: 'bars', seekStereo: true, seekUnplayed: 'blue', seekGlow: true, seekTicks: true };
+let SC = { ...SEEK_DEF }, cfgRaw = null;
+function loadCfg() {
+  const raw = safe(() => localStorage.getItem('deck:cfg'), '');
+  if (raw === cfgRaw) return;
+  cfgRaw = raw; dirty = true;
+  const c = safe(() => JSON.parse(raw), null) || {};
+  SC = {}; for (const k in SEEK_DEF) SC[k] = c[k] ?? SEEK_DEF[k];
+}
+
+/* ---------------- colours follow the theme ---------------- */
+let TH = {};
+function themeCols() {
+  const t = Y2K.tint;
+  TH = { c: t([156, 255, 46]), hi: t([234, 255, 196]), l1: t([198, 255, 107]) };
+  TH.blue = [74, 134, 197]; TH.blueHi = [127, 177, 227];
+  dirty = true;
+}
+const rgba = (c, a) => 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + Math.max(0, Math.min(1, a)).toFixed(3) + ')';
+
+/* ---------------- waveform cache (IndexedDB) ---------------- */
+const dbp = new Promise((res) => {
+  try {
+    const r = indexedDB.open('y2k-wave', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('w');
+    r.onsuccess = () => res(r.result); r.onerror = () => res(null);
+  } catch (e) { res(null); }
+});
+async function idb(mode, fn) {
+  const d = await dbp; if (!d) return null;
+  return new Promise((res) => {
+    try { const q = fn(d.transaction('w', mode).objectStore('w')); q.onsuccess = () => res(q.result ?? null); q.onerror = () => res(null); } catch (e) { res(null); }
+  });
+}
+const cacheGet = (k) => idb('readonly', (s) => s.get(k));
+const cachePut = (k, w) => idb('readwrite', (s) => s.put({ n: w.n, ch: w.ch, max: w.max, rms: w.rms, t: Date.now() }, k));
+
+/* ---------------- loading a track's waveform ---------------- */
+let wave = null, key = '', job = 0, scanning = false, status = '';
+function setStatus(s) { status = s; $('status').textContent = s; }
+const newWave = (ch) => ({ n: N, ch, max: Array.from({ length: ch }, () => new Uint8Array(N)), rms: Array.from({ length: ch }, () => new Uint8Array(N)) });
+
+async function loadWave(info) {
+  const my = ++job;
+  wave = null; scanning = false; dirty = true; setStatus('');
+  if (!info) return;
+  const [path, sub, size] = info.split('|');
+  const hit = await cacheGet(info);
+  if (my !== job) return;
+  if (hit) { wave = hit; dirty = true; return; }
+  if (/^[a-z][a-z0-9+.-]+:\/\//i.test(path)) { startLive('STREAM · BUILDING AS IT PLAYS'); return; }
+  const ext = ((path.match(/\.([a-z0-9]+)$/i) || [])[1] || '').toLowerCase();
+  if (DECODABLE.test(ext) && !(+sub > 0) && +size > 0 && +size < 700e6) {
+    scanning = true; setStatus('SCANNING WAVEFORM…');
+    const w = await decodeWave(path, my).catch(() => null);
+    if (my !== job) return;
+    scanning = false;
+    if (w) { wave = w; dirty = true; setStatus(''); cachePut(info, w); return; }
+  }
+  startLive('LIVE · BUILDING AS IT PLAYS');
+}
+
+async function decodeWave(path, my) {
+  const dir = Y2K.profileDir.split('/').join(BS) + BS + 'webview' + BS + 'y2k' + BS + 'wavecache';
+  const name = 'w' + Date.now() + '.bin', tmp = dir + BS + name + '.part';
+  safe(() => H.execute('cmd.exe', '/c (if not exist "' + dir + '" mkdir "' + dir + '") & del /q "' + dir + BS + '*.bin" 2>nul & copy /y "' + path + '" "' + tmp + '" >nul & move /y "' + tmp + '" "' + dir + BS + name + '" >nul', '', 'open', 0));
+  let ok = false;
+  for (let i = 0; i < 240 && my === job; i++) { // the copy appears under its final name only when complete
+    await new Promise((r) => setTimeout(r, 250));
+    try { ok = (await fetch('wavecache/' + name, { method: 'HEAD', cache: 'no-store' })).ok; } catch (e) {}
+    if (ok) break;
+  }
+  if (!ok || my !== job) return null;
+  const buf = await (await fetch('wavecache/' + name, { cache: 'no-store' })).arrayBuffer();
+  safe(() => H.execute('cmd.exe', '/c del /q "' + dir + BS + name + '"', '', 'open', 0));
+  const ab = await new OfflineAudioContext(1, 1, 8000).decodeAudioData(buf);
+  const ch = Math.min(2, ab.numberOfChannels), L = ab.length, w = newWave(ch);
+  let top = 0;
+  const peaks = [], rmss = [];
+  for (let c = 0; c < ch; c++) {
+    const d = ab.getChannelData(c), mx = new Float32Array(N), rm = new Float32Array(N);
+    for (let b = 0; b < N; b++) {
+      const i0 = Math.floor((b * L) / N), i1 = Math.max(i0 + 1, Math.floor(((b + 1) * L) / N));
+      let m = 0, s = 0;
+      for (let i = i0; i < i1; i++) { const v = Math.abs(d[i] || 0); if (v > m) m = v; s += v * v; }
+      mx[b] = m; rm[b] = Math.sqrt(s / (i1 - i0)); if (m > top) top = m;
+    }
+    peaks.push(mx); rmss.push(rm);
+  }
+  const gain = 1 / Math.max(top, 0.2); // normalise so quiet masters still fill the bar
+  for (let c = 0; c < ch; c++) for (let b = 0; b < N; b++) {
+    w.max[c][b] = Math.min(255, peaks[c][b] * gain * 255); w.rms[c][b] = Math.min(255, rmss[c][b] * gain * 255 * 1.4);
+  }
+  return w;
+}
+
+/* live mode: fill buckets from the visualisation stream as the track plays */
+let samples = null, vis = { n: 0, ch: 2 }, live = null;
+function startLive(msg) { wave = newWave(2); live = { filled: new Uint8Array(N), key }; setStatus(msg); dirty = true; }
+function liveFeed() {
+  if (!live || !wave || !samples || !(vis.n > 0) || live.key !== key) return;
+  if (!safe(() => H.isPlaying, false) || safe(() => H.isPaused, false)) return;
+  const len = trackLen(), pos = safe(() => H.position, 0);
+  if (!(len > 0)) return;
+  const b = Math.min(N - 1, Math.floor((pos / len) * N)), ch = vis.ch, n = Math.min(vis.n, samples.length);
+  for (let c = 0; c < 2; c++) {
+    let m = 0, s = 0, k = 0;
+    for (let i = Math.min(c, ch - 1); i < n; i += ch) { const v = Math.abs(samples[i]); if (v > m) m = v; s += v * v; k++; }
+    if (!k) continue;
+    wave.max[c][b] = Math.max(wave.max[c][b], Math.min(255, m * 255)); wave.rms[c][b] = Math.max(wave.rms[c][b], Math.min(255, Math.sqrt(s / k) * 255 * 1.4));
+  }
+  live.filled[b] = 1;
+  // a fully heard track is worth keeping
+  if (b > N * 0.97) { let f = 0; for (let i = 0; i < N; i++) f += live.filled[i]; if (f > N * 0.92) { cachePut(key, wave); live = null; setStatus(''); } }
+}
+let level = 0;
+window.chrome.webview.addEventListener('sharedbufferreceived', (e) => {
+  try { if (samples && samples.buffer) window.chrome.webview.releaseBuffer(samples.buffer); } catch (_) {}
+  samples = e.additionalData ? new Float64Array(e.getBuffer()) : null;
+  if (e.additionalData) vis = { n: e.additionalData.SampleCount, ch: e.additionalData.ChannelCount || 2 };
+});
+fb2k.on('visualisation:timer', (a) => { vis.n = a.sampleCount; vis.ch = a.channelCount || vis.ch; liveFeed(); });
+safe(() => H.requestSharedBuffer());
+
+/* H.length can read 0, so the length comes from the now-playing info (%length_seconds_fp%) when it does */
+const trackLen = () => safe(() => H.length, 0) || (key ? +key.split('|')[3] || 0 : 0);
+
+/* ---------------- seeking ---------------- */
+const bar = $('bar'), cv = $('cv'), cx = cv.getContext('2d');
+let hoverX = -1, dragFrac = -1, dirty = true;
+const fracAt = (e) => { const r = bar.getBoundingClientRect(); return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)); };
+bar.addEventListener('pointermove', (e) => { hoverX = fracAt(e); bar.classList.add('hover'); if (dragFrac >= 0) dragFrac = hoverX; showTip(); dirty = true; });
+bar.addEventListener('pointerleave', () => { hoverX = -1; bar.classList.remove('hover'); dirty = true; });
+bar.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0 || !(trackLen() > 0)) return;
+  bar.setPointerCapture(e.pointerId); dragFrac = fracAt(e); dirty = true;
+});
+bar.addEventListener('pointerup', (e) => {
+  if (dragFrac < 0) return;
+  const f = fracAt(e), len = trackLen();
+  if (len > 0 && safe(() => H.canSeek, false)) safe(() => H.seek(f * len));
+  dragFrac = -1; dirty = true;
+});
+bar.addEventListener('wheel', (e) => {
+  const len = trackLen(); if (!(len > 0) || !safe(() => H.canSeek, false)) return;
+  safe(() => H.seek(Math.max(0, Math.min(len - 0.5, safe(() => H.position, 0) + (e.deltaY < 0 ? 5 : -5)))));
+  e.preventDefault(); dirty = true;
+}, { passive: false });
+function showTip() {
+  const len = trackLen(), tip = $('tip');
+  if (!(len > 0) || hoverX < 0) { tip.textContent = ''; return; }
+  const t = hoverX * len, d = t - safe(() => H.position, 0);
+  tip.innerHTML = Y2K.fmtTime(t) + '<small>' + (d >= 0 ? '+' : '−') + Y2K.fmtTime(Math.abs(d)) + '</small>';
+  const w = bar.clientWidth, x = Math.max(36, Math.min(w - 36, hoverX * w));
+  tip.style.left = x + 'px';
+}
+
+/* ---------------- drawing ---------------- */
+let lastDraw = 0, lastFrame = 0;
+function draw(now) {
+  requestAnimationFrame(draw);
+  loadCfg();
+  const playing = safe(() => H.isPlaying, false), paused = safe(() => H.isPaused, false);
+  const busy = (playing && !paused) || hoverX >= 0 || dragFrac >= 0 || scanning || dirty;
+  if (!busy && now - lastDraw < 500) return;
+  const FR = lastFrame ? Math.min(8, (now - lastFrame) / (1000 / 75)) : 1; // 75 Hz frames since the last draw (refresh-rate independent decay)
+  lastFrame = now; lastDraw = now; dirty = false;
+  const w = cv.clientWidth, h = cv.clientHeight, dpr = window.devicePixelRatio || 1;
+  if (!w || !h) return;
+  if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+  cx.setTransform(dpr, 0, 0, dpr, 0, 0); cx.clearRect(0, 0, w, h);
+  const len = playing ? trackLen() : 0, pos = playing ? safe(() => H.position, 0) : 0;
+  const frac = dragFrac >= 0 ? dragFrac : len > 0 ? pos / len : 0;
+  const C = TH.c, HI = TH.hi, U = SC.seekUnplayed === 'theme' ? C : TH.blue, UH = SC.seekUnplayed === 'theme' ? TH.l1 : TH.blueHi;
+  const mid = h / 2, half = h / 2 - 5;
+
+  // live music level for the playhead glow
+  if (samples && playing && !paused && vis.n > 0) { let s = 0; const n = Math.min(vis.n, samples.length, 2048); for (let i = 0; i < n; i++) s += samples[i] * samples[i]; level = Math.max(level * Math.pow(0.85, FR), Math.sqrt(s / Math.max(1, n)) * 2.2); } else level *= Math.pow(0.9, FR);
+
+  // time grid: a tick every 30 s, a label every minute
+  if (SC.seekTicks && len > 0) {
+    const step = len > 1200 ? 300 : len > 600 ? 60 : 30;
+    cx.font = '7px Silkscreen, monospace'; cx.textBaseline = 'bottom';
+    for (let t = step; t < len; t += step) {
+      const x = Math.round((t / len) * w) + 0.5, major = t % 60 === 0;
+      cx.fillStyle = rgba(C, major ? 0.1 : 0.05); cx.fillRect(x, 0, 1, h);
+      if (major && x < w - 30) { cx.fillStyle = rgba(C, 0.3); cx.fillText(Y2K.fmtTime(t), x + 3, h - 2); }
+    }
+  }
+  cx.fillStyle = rgba(C, 0.12); cx.fillRect(0, Math.round(mid), w, 1); // centre line
+
+  if (!wave) {
+    if (scanning) { // a scan beam sweeping while the file is read
+      const x = ((now / 1100) % 1) * (w + 160) - 80, g = cx.createLinearGradient(x - 80, 0, x + 80, 0);
+      g.addColorStop(0, rgba(C, 0)); g.addColorStop(0.5, rgba(C, 0.25)); g.addColorStop(1, rgba(C, 0));
+      cx.fillStyle = g; cx.fillRect(x - 80, 0, 160, h);
+    }
+  } else {
+    const style = SC.seekStyle, step = style === 'wave' ? 1 : 3, bw = style === 'wave' ? 1 : 2, cell = 3;
+    const stereo = SC.seekStereo && wave.ch > 1, px = Math.ceil(frac * w);
+    const P = { pk: new Path2D(), rm: new Path2D(), upk: new Path2D(), urm: new Path2D() };
+    const filled = live && live.key === key ? live.filled : null;
+    for (let x = 0; x < w; x += step) {
+      const b0 = Math.floor((x / w) * N), b1 = Math.max(b0 + 1, Math.floor(((x + step) / w) * N));
+      if (filled) { let any = 0; for (let b = b0; b < b1; b++) any |= filled[b]; if (!any) continue; }
+      const played = x + bw / 2 <= px;
+      for (let c = 0; c < (stereo ? 2 : 1); c++) {
+        let m = 0, r = 0;
+        for (let b = b0; b < b1 && b < N; b++) {
+          for (let k = stereo ? c : 0; k < (stereo ? c + 1 : wave.ch); k++) { if (wave.max[k][b] > m) m = wave.max[k][b]; if (wave.rms[k][b] > r) r = wave.rms[k][b]; }
+        }
+        m /= 255; r = Math.min(m, r / 255);
+        const hm = Math.max(1, m * half), hr = Math.max(0.5, r * half);
+        const dir = stereo ? (c === 0 ? -1 : 1) : 0;
+        const add = (path, hh) => {
+          if (style === 'led') {
+            const cells = Math.max(1, Math.floor(hh / cell));
+            for (let i = 0; i < cells; i++) {
+              const off = i * cell;
+              if (dir <= 0) path.rect(x, mid - off - cell + 1, bw, cell - 1);
+              if (dir >= 0) path.rect(x, mid + off + 1, bw, cell - 1);
+            }
+          } else if (dir < 0) path.rect(x, mid - hh, bw, hh);
+          else if (dir > 0) path.rect(x, mid + 1, bw, hh);
+          else path.rect(x, mid - hh, bw, hh * 2 + 1);
+        };
+        add(played ? P.pk : P.upk, hm);
+        add(played ? P.rm : P.urm, hr);
+      }
+    }
+    cx.fillStyle = rgba(U, 0.4); cx.fill(P.upk);
+    cx.fillStyle = rgba(UH, 0.55); cx.fill(P.urm);
+    if (SC.seekGlow) { cx.shadowColor = rgba(C, 0.85); cx.shadowBlur = 6 + level * 8; }
+    cx.fillStyle = rgba(C, 0.75); cx.fill(P.pk);
+    cx.shadowBlur = 0;
+    cx.fillStyle = rgba(HI, 0.85); cx.fill(P.rm);
+  }
+
+  // hover ghost cursor
+  if (hoverX >= 0 && len > 0) { cx.fillStyle = rgba(HI, 0.35); cx.fillRect(Math.round(hoverX * w), 0, 1, h); }
+  // playhead: bright line, pointer notches, and a glow that breathes with the music
+  if (len > 0) {
+    const x = Math.round(frac * w);
+    if (SC.seekGlow) {
+      const g = cx.createRadialGradient(x, mid, 0, x, mid, 18 + level * 26);
+      g.addColorStop(0, rgba(C, 0.28 + level * 0.3)); g.addColorStop(1, rgba(C, 0));
+      cx.fillStyle = g; cx.fillRect(x - 50, 0, 100, h);
+    }
+    cx.shadowColor = rgba(HI, 0.9); cx.shadowBlur = 8;
+    cx.fillStyle = rgba(HI, 1); cx.fillRect(x - 1, 0, 2, h);
+    cx.beginPath(); cx.moveTo(x - 5, 0); cx.lineTo(x + 5, 0); cx.lineTo(x, 5); cx.closePath(); cx.fill();
+    cx.beginPath(); cx.moveTo(x - 5, h); cx.lineTo(x + 5, h); cx.lineTo(x, h - 5); cx.closePath(); cx.fill();
+    cx.shadowBlur = 0;
+  }
+  if (hoverX >= 0) showTip();
+}
+
+/* ---------------- wiring ---------------- */
+function poll() {
+  const playing = safe(() => H.isPlaying, false);
+  const info = playing ? safe(() => H.nowPlaying('%path%|$if2(%subsong%,0)|$if2(%filesize%,0)|%length_seconds_fp%'), '') : '';
+  if (info !== key) { key = info; loadWave(info); }
+}
+themeCols(); Y2K.onSchemeChange(themeCols);
+loadCfg();
+setInterval(poll, 300); poll();
+fb2k.on('playback:seeked', () => { dirty = true; });
+requestAnimationFrame(draw);
+</script>
+</body>
+</html>
