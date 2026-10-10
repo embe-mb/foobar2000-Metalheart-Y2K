@@ -7,6 +7,9 @@
 ### New
 
 **Built-in updater**
+
+<img width="340" height="76" alt="update" src="https://github.com/user-attachments/assets/e1db701b-0f11-4762-9087-3338059722f6" />
+
 - When the deck opens, it checks this GitHub page for a newer release, at most once an hour. If there is one, a notice slides in at the top of the deck with **DOWNLOAD & INSTALL**, **WHAT'S NEW** and **✕**. ✕ hides the notice for that version only.
 - **DOWNLOAD & INSTALL** opens a small window with a progress bar:
   - It saves the new zip to your Downloads folder and unpacks it.
@@ -17,13 +20,20 @@
 
 **Two new centerpieces**
 - **PYRAMID**
+  
+  <img width="926" height="720" alt="pyramid" src="https://github.com/user-attachments/assets/bd4a6ffe-9124-46b4-8982-e2a013550f3a" />
+  
   - Four tiers (base, two middles, capstone) turn in alternating directions, faster as the track gets more intense.
   - Each bass hit ripples down the tiers from the capstone to the base.
   - Loud passages lift the tiers apart, and a core light shines out of the gaps. Big hits fire a beam from the apex.
   - **Shatter on drops:** when a track drops after a quieter stretch, the pyramid bursts into tumbling glass shards with the core blazing through. Everything slams back together on the beat with a ripple and an apex beam.
   - **Glyph bands:** carved pixel symbols on each tier light up with that tier's frequencies, and a sweep runs through them on the beat.
   - Styles: GLASS, WIRE or SOLID. Options for same-direction tiers, shatter and glyphs.
+    
 - **CUBE**
+  
+  <img width="851" height="669" alt="cube" src="https://github.com/user-attachments/assets/138631d4-fa70-473f-8961-e25e7371f371" />
+  
   - A big glass cube with a glowing, pulsing ball of energy inside. The ball hits a different wall exactly on each beat, sending rings across the glass, lighting it up and throwing sparks.
   - The struck glass panel pops out of the frame on thin struts, with light showing through the gap, then springs back. The frame itself stays still.
   - Up to 2 extra free balls that bounce off the walls and each other, and get knocked away when the beat ball hits them.
@@ -44,8 +54,17 @@
 **Pod screen** (a pocket-LCD game screen in the control pod, above the VU meter)
 - A 4-shade screen with slow, ghosting pixels and a red power LED while music plays.
 - **RUNNER:** a stick figure runs in tempo, crouches just before the beat and jumps a cube right on it, kicking up dust. The sun rises at the start of the track, crosses the sky and sets at the end, with rays flickering on the beat. Birds sometimes fly over, flapping in time. When stopped he stands still and blinks.
+  
+  <img width="280" height="58" alt="runner" src="https://github.com/user-attachments/assets/d5a5fd30-96b2-489e-b10c-32ed9ddf3830" />
+
 - **SHIP:** a small fighter shoots incoming stars so each explodes on the beat, with a white-hot flash, blast ring, debris, screen flash and a one-pixel jolt. Ringed planets, moons, a gas giant, a blinking satellite and the odd comet drift past. Background stars speed up with the music and streak on treble peaks.
+  
+  <img width="286" height="56" alt="ship" src="https://github.com/user-attachments/assets/673578f5-b514-4a16-a472-05bda4f85607" />
+
 - **BLOB:** lands on every beat and squashes harder on bigger kicks. It grins when the music is energetic, squints with its mouth open on big kicks, goes wide-eyed with a wiggling antenna and popping notes on treble peaks, and sleeps with floating Z's when stopped.
+  
+  <img width="281" height="59" alt="blob" src="https://github.com/user-attachments/assets/a21250a5-4584-452d-a7ed-eb2f471777bc" />
+
   - A **little blob** sleeps beside it. Hard bass slams startle it awake with a "!". While awake it watches, hops along every other beat and sweats on slams. A few seconds after the slams stop it gets drowsy, yawns and dozes off again.
   - Slams shake the screen and throw bouncing pebbles. Landings kick up dust, flatten the grass tufts and make a flower sway on its springy stem.
   - A speaker stack on each side: the woofers pump with the bass and kick on landings, and sound rings roll out on beats in busy parts.
@@ -53,6 +72,9 @@
 - Settings: on/off, show, screen tint (DMG green, POCKET grey or THEME colour) and ghosting.
 
 **Themed Track Info panel** (replaces the Columns UI tab stack on the right)
+
+<img width="599" height="72" alt="trackinfo" src="https://github.com/user-attachments/assets/a85d7596-ff2c-4d8b-9783-b3a26dfdefb1" />
+
 - A tab bar like old hi-fi push-buttons: raised keys in a recessed strip, with the active key pressed in and a little LED lit. Tabs: **DOSSIER**, **LYRICS**, **ARTIST BIO**, **TAGS**. The last tab used is remembered, and tabs keep their place when you switch.
 - **MILKDROP** sits apart at the far end and opens MilkDrop in its own window; double-click that window for full screen.
 - **LYRICS** (new themed view; OpenLyrics still finds and saves the lyrics)
@@ -68,14 +90,27 @@
 - Click or drag anywhere on it to scan through the track, with a time readout as you drag. The mouse wheel skips 5 seconds. The click area is much taller than the old thin bar.
 - **Styles** (CUSTOMIZE DECK › SEEKING):
   - **BAR:** the classic slider.
+    <img width="1156" height="48" alt="bar" src="https://github.com/user-attachments/assets/8a163dcd-b4a2-4058-8f77-6d28bea77e16" />
+  
   - **TAPE:** a glowing VCR tape-remaining display. The left spool empties onto the right one, each spinning faster as its pack shrinks. A row of segments counts down, with **REMAIN ▸▸▸** above it.
+    <img width="1154" height="50" alt="tape" src="https://github.com/user-attachments/assets/6106bc96-da01-4d39-bb6f-3957265a648d" />
+
   - **BLOCKS:** a chunky Y2K progress bar with glossy cells, a running shine and a flash on the beat.
+    <img width="1158" height="46" alt="blocks" src="https://github.com/user-attachments/assets/c234db94-f450-4bfb-b641-c943559aae7e" />
+
   - **COMET:** a glowing head that sheds sparks, with a burst on every beat.
+    <img width="1159" height="43" alt="comet" src="https://github.com/user-attachments/assets/50544e41-d73e-4922-ac0a-d27c0b73e776" />
+
   - **OFF:** hides the strip, for when the waveform seek bar is on screen. The times stay.
 
 **FULL SCREEN button** beside CUSTOMIZE DECK in the control pod. It does the same as F11, and switches to **EXIT** while full screen. F11 and Esc still work, and the button follows either way.
 
+<img width="274" height="37" alt="fullscreen" src="https://github.com/user-attachments/assets/71ccc7a3-e081-4f44-9ee2-21afaf7500a3" />
+
 **THEME tab** (applies to every panel, not just the deck)
+
+<img width="1022" height="76" alt="theme" src="https://github.com/user-attachments/assets/7ae33332-7ce2-4828-a56c-ee3a8dad7ac7" />
+
 - **Chrome finish:** LIGHT (brushed silver, as before) or DARK (black chrome with light lettering on the top bar, control pod, info headers, badges and round buttons).
 - **Chrome colour:** Silver, Ice, Rose, Gold, Mint, Violet, or the theme colour.
 - **Headers & tabs:** recolours the steel blue of the panel headers, buttons and list selection: Steel blue, Ruby, Violet, Emerald, Tangerine, Gold, Graphite, or the theme colour. The waveform seek bar's unplayed part follows it.
@@ -97,7 +132,12 @@
 
 **Top line extras**
 - **Spinning reel icon:** a small reel-to-reel spool beside NOW PLAYING turns with the music and coasts to a stop on pause. Turn it off to get the old blinking square back.
+  
+  <img width="113" height="29" alt="nowplaying" src="https://github.com/user-attachments/assets/33b3d9ae-9d09-42c7-aa22-c09b0b17219f" />
+
 - **Chevron chaser:** 15 arrows left of the L/R meter light up one after another, one sweep per beat when the beat is locked, otherwise a steady run. They go dark when stopped.
+  
+  <img width="396" height="26" alt="cheveron" src="https://github.com/user-attachments/assets/a49d1460-dc4a-449a-8bb8-21c5fe98d760" />
 
 **Source icon**
 - **Vinyl tonearm:** the arm starts on the outer groove, works its way in to the label as the song plays and lifts off when you stop. It glides when you seek.
