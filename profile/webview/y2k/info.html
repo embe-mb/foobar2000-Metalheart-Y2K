@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Metalheart Track Info</title>
+<link rel="stylesheet" href="common.css?v=15">
+<style>
+  /* The track-info tab bar: hardware selector keys in a recessed rail, so it reads differently from the glossy
+     TRACK INFO capsule above it and from the pill chips in the library. The active key is pressed in with its
+     LED lit. MILKDROP sits apart at the far end: it opens its own window. */
+  html, body { height: 100%; }
+  body { display: flex; flex-direction: column; overflow: hidden; padding: 0; }
+  .keys { flex: none; display: flex; align-items: center; gap: 4px; padding: 6px 7px 8px; position: relative; z-index: 2;
+    background: linear-gradient(180deg, #080b0f, #121820 60%, #161d26); border-bottom: 1px solid #000;
+    box-shadow: inset 0 3px 6px rgba(0,0,0,.85), inset 0 -1px 0 rgba(255,255,255,.05), 0 2px 6px rgba(0,0,0,.5); }
+  .key { position: relative; flex: none; height: 22px; padding: 0 9px 0 17px; display: flex; align-items: center; cursor: pointer; border-radius: 3px;
+    font: 400 8px/1 var(--pixel); letter-spacing: .12em; color: #c3ccd6; text-shadow: 0 1px 0 #000; white-space: nowrap; user-select: none;
+    background: linear-gradient(180deg, #56606e 0%, #343c47 46%, #262c35 54%, #1d2229 100%);
+    border: 1px solid #04060a; box-shadow: inset 0 1px 0 rgba(255,255,255,.25), inset 0 -1px 0 rgba(0,0,0,.4), 0 2px 0 #04060a, 0 3px 5px rgba(0,0,0,.6);
+    transform: translateY(-1px); transition: transform .06s, box-shadow .06s; }
+  .key::before { content: ""; position: absolute; left: 7px; top: 50%; width: 5px; height: 5px; margin-top: -2.5px; border-radius: 50%;
+    background: #1a2412; box-shadow: inset 0 1px 1px rgba(0,0,0,.9), 0 1px 0 rgba(255,255,255,.08); }
+  .key:hover { color: #fff; filter: brightness(1.08); }
+  .key.on { transform: translateY(1px); color: rgb(var(--ceaffc4)); text-shadow: 0 0 6px var(--lime-glow);
+    background: linear-gradient(180deg, #10151b, #1b222a); box-shadow: inset 0 2px 5px rgba(0,0,0,.95), 0 1px 0 rgba(255,255,255,.06); }
+  .key.on::before { background: radial-gradient(circle at 40% 35%, rgb(var(--cf4ffe0)), var(--lime-2) 50%, var(--lime-4)); box-shadow: 0 0 6px var(--lime-glow); }
+  .keys .gap { flex: 1; min-width: 6px; }
+  .keys .div { flex: none; width: 2px; height: 18px; margin: 0 2px; background: linear-gradient(90deg, #000, rgba(255,255,255,.08)); }
+  .key.ext { padding-right: 8px; color: #b9c2cc; }
+  .key.ext::before { background: #2a1d08; }
+  .key.ext svg { width: 9px; height: 9px; margin-left: 6px; fill: currentColor; opacity: .8; }
+  .key.ext.fire::before { background: radial-gradient(circle at 40% 35%, #fff4d8, var(--amber) 45%, #8a5200); box-shadow: 0 0 6px rgba(255,182,39,.8); }
+  /* narrow panels: tighter keys */
+  body.narrow .key { padding: 0 6px 0 14px; letter-spacing: .06em; }
+  body.narrow .key::before { left: 5px; }
+  .pages { flex: 1; min-height: 0; position: relative; }
+  .pages iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: none; background: transparent; }
+  .pages iframe.on { display: block; }
+</style>
+</head>
+<body>
+<div class="backdrop"></div>
+<div class="keys" id="keys"></div>
+<div class="pages" id="pages"></div>
+
+<script src="common.js?v=15"></script>
+<script>
+'use strict';
+const { safe } = Y2K;
+// [id, label, page]; each page loads into its own frame the first time it is opened and stays alive after that
+const TABS = [['dossier', 'DOSSIER', 'dossier.html'], ['lyrics', 'LYRICS', 'lyrics.html'], ['bio', 'ARTIST BIO', 'bio.html'], ['tags', 'TAGS', 'tags.html']];
+let tab = safe(() => localStorage.getItem('info:tab'), '') || 'dossier';
+if (!TABS.some((t) => t[0] === tab)) tab = 'dossier';
+const keys = document.getElementById('keys'), pages = document.getElementById('pages');
+keys.innerHTML = TABS.map(([id, l]) => '<div class="key" data-tab="' + id + '">' + l + '</div>').join('') +
+  '<span class="gap"></span><span class="div"></span>' +
+  '<div class="key ext" id="milk" title="Open the MilkDrop visualiser in its own window (double-click it for full screen)">MILKDROP' +
+  '<svg viewBox="0 0 24 24"><path d="M14 3h7v7h-2V6.4l-8.3 8.3-1.4-1.4L17.6 5H14zM5 5h6v2H5v12h12v-6h2v8H3V5z"/></svg></div>';
+function show(id) {
+  tab = id; safe(() => localStorage.setItem('info:tab', id));
+  for (const [tid, , page] of TABS) {
+    let f = pages.querySelector('iframe[data-tab="' + tid + '"]');
+    if (tid === id && !f) { f = document.createElement('iframe'); f.dataset.tab = tid; f.src = page; pages.appendChild(f); }
+    if (f) f.classList.toggle('on', tid === id);
+  }
+  keys.querySelectorAll('.key[data-tab]').forEach((k) => k.classList.toggle('on', k.dataset.tab === id));
+}
+keys.querySelectorAll('.key[data-tab]').forEach((k) => { k.onclick = () => show(k.dataset.tab); });
+const milk = document.getElementById('milk');
+milk.onclick = () => { Y2K.runCommand('MilkDrop'); milk.classList.add('fire'); setTimeout(() => milk.classList.remove('fire'), 900); };
+const fit = () => document.body.classList.toggle('narrow', keys.scrollWidth > keys.clientWidth + 1 || window.innerWidth < 430);
+window.addEventListener('resize', () => { document.body.classList.remove('narrow'); fit(); });
+show(tab); fit();
+</script>
+</body>
+</html>

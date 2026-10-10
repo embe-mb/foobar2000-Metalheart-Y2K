@@ -75,7 +75,7 @@ You have two ways back:
 | [Columns UI](https://www.foobar2000.org/components/view/foo_ui_columns) | reupen | the window layout |
 | [WebView2](https://www.foobar2000.org/components/view/foo_webview2) | J. Cassis | the deck, seek bar, library, playlist and info tabs |
 | [OpenLyrics](https://www.foobar2000.org/components/view/foo_openlyrics) | jacquesh | the LYRICS tab and the deck's lyric line |
-| [MilkDrop 2](https://www.foobar2000.org/components/view/foo_vis_milk2) | J. Cassis | the MILKDROP tab |
+| [MilkDrop 2](https://www.foobar2000.org/components/view/foo_vis_milk2) | J. Cassis | the MILKDROP window |
 | [Album List Panel](https://www.foobar2000.org/components/view/foo_uie_albumlist) | reupen | the library in the classic layout |
 | [ListenBrainz 2](https://github.com/phw/foo_listenbrainz2/releases) | phw | scrobbling (optional) |
 | [Navidrome / Subsonic](https://www.foobar2000.org/components/view/foo_navidrome) | santiagorod92 | the NAVIDROME button (optional) |
@@ -85,17 +85,29 @@ You have two ways back:
 This theme is primarily catered to those who use MusicBrainz Picard and scrobble their information to ListenBrainz. Various parts of this theme pull information from MusicBrainz to further enhance the experience of those that love to see data represented in multitudes of ways.
 
 - **The main deck.** It has:
-  - a simulated LCD screen showing the track details, badges, the artist's country flag, a karaoke-style line of synced lyrics with a preview of the next line, and a spectrum analyser;
-  - a control pod with a stereo VU meter and an oscilloscope.
-- **CUSTOMIZE DECK.** Changes apply live, and the customizer sets:
-  - **Centerpiece:** ORB (liquid goo in a wireframe cage with orbit rings), TOWERS (PS2-style glass data towers), HELIX (a Y2K DNA double helix), or CYCLE (a different one on every new track).
-  - **LCD backgrounds:** bubbles, TV static, digital rain and a retro grid.
-  - **Theme colour:** lime, aqua, ice blue, magenta, amber or ember red, cross-fading over the whole skin. The **ALBUM ART** option takes its colours from the cover of what's playing, in MONO (one colour) or MULTI (up to three).
-- **Seek bar.** It is built in, shows the track's waveform, and follows the theme colour. The styles are bars, wave and LED.
-- **Info tabs.**
-  - **Dossier:** release, credits, rip-log and MusicBrainz details. This section relies on the default Columns UI configuration due to things like OpenLyrics and MilkDrop needing panels to function properly.
-  - **Artist Bio:** biography and discography.
-  - **Lyrics**, **MilkDrop** (with about 900 public domain presets) and **Tags**.
+  - a jewel case with your cover art and a spinning source icon (CD, vinyl with a moving tonearm, 7" single, tape, MiniDisc and more);
+  - a simulated LCD screen showing the track details, badges, the artist's country flag, a karaoke-style lyric line that lights up word by word, a spectrum analyser and a BPM readout that flashes on the beat;
+  - a progress strip you can drag to scan the track, styled as a bar, VCR tape counter, Y2K blocks or a comet;
+  - a control pod with a stereo VU meter, an oscilloscope, a FULL SCREEN button and a little game screen (RUNNER, SHIP or BLOB) that plays along to the beat.
+- **3D centerpieces, synced to the beat.** A built-in BPM scanner finds each track's tempo and beats, and the centerpieces hit on them:
+  - **ORB:** liquid goo in a wireframe cage that spins up like a top on bass-heavy songs;
+  - **TOWERS:** PS2-style glass data towers, one per frequency band;
+  - **HELIX:** a Y2K DNA double helix with a scanner ring;
+  - **PYRAMID:** counter-rotating glass tiers that shatter on drops;
+  - **CUBE:** a glass cube with energy balls bouncing off its walls on the beat, tesla arcs and orbiting mini-cubes;
+  - **CYCLE:** a different one on every new track.
+- **CUSTOMIZE DECK.** It opens in its own window and changes apply live:
+  - every centerpiece has its own tab of settings;
+  - **LCD backgrounds:** bubbles, TV static, digital rain and a retro grid;
+  - **Theme colour:** lime, aqua, ice blue, magenta, amber or ember red, cross-fading over the whole skin. The **ALBUM ART** option takes its colours from the cover of what's playing, in MONO (one colour) or MULTI (up to three);
+  - **THEME:** light or dark chrome, the chrome's tint, and the colour of the headers and tabs.
+- **Seek bar.** It is built in, shows the track's whole waveform (Apple Lossless included), and follows the theme colour. The styles are bars, wave and LED.
+- **Track Info panel**, with a hi-fi push-button tab bar:
+  - **Dossier:** release, credits, the full rip-log report (UTF-16 EAC logs included) and MusicBrainz details.
+  - **Lyrics:** synced lyrics with word-by-word highlighting. OpenLyrics still does the searching, from a 2-pixel panel tucked under the tabs, because it only works while one of its own panels is on screen.
+  - **Artist Bio:** biography and discography; click an album to play it from your library or Navidrome.
+  - **Tags**, and **MilkDrop** (about 900 public domain presets) in its own window.
+- **Updates itself.** The deck tells you when a new version is out and can download and install it for you. See the [changelog](CHANGELOG.md).
 
 The full guide is in [`README - METALHEART Y2K.txt`](README%20-%20METALHEART%20Y2K.txt).
 

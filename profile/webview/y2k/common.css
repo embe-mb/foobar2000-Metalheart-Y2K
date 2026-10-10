@@ -28,12 +28,29 @@
   --metal-2: #131920;
   --metal-3: #0b0f14;
 
-  /* Web 2.0 steel blue */
+  /* Web 2.0 steel blue (headers, tabs, buttons, selection) */
   --blue-0: #cfe3f7;
   --blue-1: #7fb1e3;
   --blue-2: #4a86c5;
   --blue-3: #2c5d92;
   --blue-4: #183a60;
+  --blue-5: #0d223a;
+  --sel-0: #3a72aa;
+  --sel-1: #2c5d92;
+
+  /* chrome SURFACES (bezels, top bar, pod, pills, buttons) and the ink printed on them. Y2K.applyLook() rewrites
+     these for the DARK finish and the chrome colour; --chrome-* above stay fixed (they're also used as text greys) */
+  --cr-0: #ffffff;
+  --cr-1: #e8edf2;
+  --cr-2: #c5cdd6;
+  --cr-3: #98a4b1;
+  --cr-4: #6b7786;
+  --cr-5: #3d4753;
+  --cr-hl: rgba(255,255,255,.95);
+  --ink-0: #1a222b;
+  --ink-1: #2a3440;
+  --ink-2: #3d4753;
+  --ink-sh: rgba(255,255,255,.7);
 
   /* theme accent: every green in the skin is one of these r,g,b triplets; Y2K.applyScheme() recolours them */
   --c0b1c01: 11,28,1; --c0d1a0b: 13,26,11; --c061005: 6,16,5; --c0d1f02: 13,31,2; --c0d2401: 13,36,1;
@@ -132,14 +149,14 @@ html, body {
   border-radius: var(--radius);
   background:
     repeating-linear-gradient(90deg, rgba(255,255,255,.035) 0 1px, transparent 1px 3px),
-    linear-gradient(180deg, var(--chrome-1) 0%, var(--chrome-2) 18%, var(--chrome-3) 52%, var(--chrome-2) 53%, var(--chrome-1) 100%);
+    linear-gradient(180deg, var(--cr-1) 0%, var(--cr-2) 18%, var(--cr-3) 52%, var(--cr-2) 53%, var(--cr-1) 100%);
   box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.95),
+    inset 0 1px 0 var(--cr-hl),
     inset 0 -1px 0 rgba(0,0,0,.35),
     0 1px 0 rgba(255,255,255,.08),
     0 6px 18px rgba(0,0,0,.55);
-  border: 1px solid var(--chrome-5);
-  color: var(--chrome-6);
+  border: 1px solid var(--cr-5);
+  color: var(--ink-0);
 }
 .chrome.dark {
   background:
@@ -153,7 +170,7 @@ html, body {
 /* screw heads in bezel corners */
 .screws::before, .screws::after {
   content: ""; position: absolute; width: 7px; height: 7px; border-radius: 50%; top: 6px;
-  background: radial-gradient(circle at 35% 35%, #fff, #8995a3 60%, #3d4753);
+  background: radial-gradient(circle at 35% 35%, var(--cr-0), var(--cr-3) 60%, var(--cr-5));
   box-shadow: 0 0 0 1px rgba(0,0,0,.35);
 }
 .screws::before { left: 6px; }
@@ -226,9 +243,9 @@ html, body {
 .pill {
   display: inline-flex; align-items: center; gap: 5px; height: 18px; padding: 0 8px;
   border-radius: 9px; font: 700 9.5px/1 var(--ui); letter-spacing: .05em; text-transform: uppercase; white-space: nowrap;
-  color: #13202d; text-shadow: 0 1px 0 rgba(255,255,255,.5);
-  background: linear-gradient(180deg, rgba(255,255,255,.7), rgba(255,255,255,.15) 50%, transparent 51%), linear-gradient(180deg, var(--chrome-1), var(--chrome-3));
-  border: 1px solid var(--chrome-5);
+  color: var(--ink-0); text-shadow: 0 1px 0 var(--ink-sh);
+  background: linear-gradient(180deg, rgba(255,255,255,.7), rgba(255,255,255,.15) 50%, transparent 51%), linear-gradient(180deg, var(--cr-1), var(--cr-3));
+  border: 1px solid var(--cr-5);
   box-shadow: 0 1px 2px rgba(0,0,0,.45);
 }
 .pill.lime { color: rgb(var(--c0b1c01)); background: linear-gradient(180deg, rgba(255,255,255,.7), rgba(255,255,255,.15) 50%, transparent 51%), linear-gradient(180deg, var(--lime-1), var(--lime-3)); border-color: var(--lime-4); box-shadow: 0 0 8px var(--lime-glow), 0 1px 2px rgba(0,0,0,.45); }
@@ -248,11 +265,11 @@ html, body {
   background:
     radial-gradient(circle at 50% 18%, rgba(255,255,255,.85), rgba(255,255,255,0) 45%),
     radial-gradient(circle at 50% 120%, rgba(var(--c9cff2e),.25), transparent 60%),
-    linear-gradient(180deg, var(--chrome-2), var(--chrome-4) 60%, var(--chrome-5));
-  box-shadow: inset 0 -2px 4px rgba(0,0,0,.45), inset 0 1px 0 #fff, 0 3px 6px rgba(0,0,0,.55), 0 0 0 3px rgba(0,0,0,.25);
+    linear-gradient(180deg, var(--cr-2), var(--cr-4) 60%, var(--cr-5));
+  box-shadow: inset 0 -2px 4px rgba(0,0,0,.45), inset 0 1px 0 var(--cr-hl), 0 3px 6px rgba(0,0,0,.55), 0 0 0 3px rgba(0,0,0,.25);
   transition: transform .08s, filter .15s;
 }
-.orb-btn svg { width: 46%; height: 46%; fill: #1b232c; filter: drop-shadow(0 1px 0 rgba(255,255,255,.6)); }
+.orb-btn svg { width: 46%; height: 46%; fill: var(--ink-0); filter: drop-shadow(0 1px 0 var(--ink-sh)); }
 .orb-btn:hover { filter: brightness(1.1); }
 .orb-btn:active { transform: translateY(1px) scale(.97); }
 .orb-btn.big { --size: 58px; }
@@ -261,7 +278,7 @@ html, body {
     radial-gradient(circle at 50% 16%, rgba(255,255,255,.9), rgba(255,255,255,0) 42%),
     radial-gradient(circle at 50% 100%, var(--lime-0), transparent 55%),
     linear-gradient(180deg, var(--lime-1), var(--lime-3) 55%, var(--lime-4));
-  box-shadow: inset 0 -3px 6px rgba(0,0,0,.4), inset 0 1px 0 #fff, 0 0 14px var(--lime-glow), 0 4px 8px rgba(0,0,0,.6), 0 0 0 4px rgba(20,26,32,.85), 0 0 0 5px var(--chrome-4);
+  box-shadow: inset 0 -3px 6px rgba(0,0,0,.4), inset 0 1px 0 #fff, 0 0 14px var(--lime-glow), 0 4px 8px rgba(0,0,0,.6), 0 0 0 4px rgba(20,26,32,.85), 0 0 0 5px var(--cr-4);
 }
 .orb-btn.big svg, .orb-btn.lime svg { fill: rgb(var(--c0f2402)); }
 .orb-btn.on { box-shadow: inset 0 -2px 4px rgba(0,0,0,.45), inset 0 1px 0 #fff, 0 0 10px var(--lime-glow), 0 0 0 3px rgba(0,0,0,.25); }
@@ -281,7 +298,7 @@ html, body {
 }
 .rail .knob {
   position: absolute; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%; left: 0;
-  background: radial-gradient(circle at 40% 30%, #fff, var(--chrome-2) 45%, var(--chrome-4));
+  background: radial-gradient(circle at 40% 30%, #fff, var(--cr-2) 45%, var(--cr-4));
   border: 1px solid var(--chrome-6); box-shadow: 0 2px 4px rgba(0,0,0,.6);
 }
 
@@ -298,7 +315,7 @@ html, body {
 /* ---------- scrollbars ---------- */
 ::-webkit-scrollbar { width: 12px; height: 12px; }
 ::-webkit-scrollbar-track { background: linear-gradient(90deg, #0b0f13, #161c22); border-left: 1px solid #000; }
-::-webkit-scrollbar-thumb { border-radius: 6px; border: 2px solid #0b0f13; background: linear-gradient(90deg, var(--chrome-2), var(--chrome-4)); }
+::-webkit-scrollbar-thumb { border-radius: 6px; border: 2px solid #0b0f13; background: linear-gradient(90deg, var(--cr-2), var(--cr-4)); }
 ::-webkit-scrollbar-thumb:hover { background: linear-gradient(90deg, var(--lime-1), var(--lime-3)); }
 
 .hidden { display: none !important; }

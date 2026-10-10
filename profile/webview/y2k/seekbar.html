@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>Metalheart Seekbar</title>
-<link rel="stylesheet" href="common.css?v=9">
+<link rel="stylesheet" href="common.css?v=15">
 <style>
   body { padding: 3px 8px 4px; background: #0b0f14; overflow: hidden; }
   /* an LCD strip like the deck's screen: tinted glass, inner shadow, gloss on the top half */
@@ -23,13 +23,15 @@
 </head>
 <body>
 <div class="bar" id="bar"><canvas id="cv"></canvas><span class="status" id="status"></span><div class="tip" id="tip"></div></div>
-<script src="common.js?v=9"></script>
+<script src="common.js?v=15"></script>
+<script src="alac.js?v=1"></script>
 <script>
 'use strict';
 /* METALHEART // Y2K waveform seek bar.
    Supported files are copied into ./wavecache by a hidden `cmd copy` (the panel's own web server can then fetch
-   them), decoded with Web Audio at 8 kHz and reduced to N peak/RMS buckets per channel. Everything else
-   (ALAC, APE, WavPack, DSD, cue-sheet tracks, streams...) is built live from the visualisation stream while it plays.
+   them), decoded with Web Audio at 8 kHz (ALAC by alac.js, in a worker) and reduced to N peak/RMS buckets per
+   channel. Everything else (APE, WavPack, DSD, cue-sheet tracks, streams...) is built live from the
+   visualisation stream while it plays.
    Finished waveforms are cached in IndexedDB, keyed by path|subsong|size|length. */
 const { H, safe } = Y2K;
 Y2K.fadePriority(); // theme fades run at full frame rate here
@@ -54,7 +56,10 @@ let TH = {};
 function themeCols() {
   const t = Y2K.tint;
   TH = { c: t([156, 255, 46]), hi: t([234, 255, 196]), l1: t([198, 255, 107]) };
-  TH.blue = [74, 134, 197]; TH.blueHi = [127, 177, 227];
+  // the unplayed part's "blue" is the headers' colour (THEME tab: HEADERS & TABS)
+  const css = (n, d) => { const m = getComputedStyle(document.documentElement).getPropertyValue(n).trim().match(/^#([0-9a-f]{6})$/i);
+    return m ? [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16)) : d; };
+  TH.blue = css('--blue-2', [74, 134, 197]); TH.blueHi = css('--blue-1', [127, 177, 227]); TH.look = Y2K.look.caps;
   dirty = true;
 }
 const rgba = (c, a) => 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + Math.max(0, Math.min(1, a)).toFixed(3) + ')';
@@ -74,7 +79,115 @@ async function idb(mode, fn) {
   });
 }
 const cacheGet = (k) => idb('readonly', (s) => s.get(k));
-const cachePut = (k, w) => idb('readwrite', (s) => s.put({ n: w.n, ch: w.ch, max: w.max, rms: w.rms, t: Date.now() }, k));
+// scanned: the whole file was decoded and searched for a beat (a live-built waveform never was)
+const cachePut = (k, w, beat, scanned) => idb('readwrite', (s) => s.put({ n: w.n, ch: w.ch, max: w.max, rms: w.rms, beat: beat || null, scanned: !!scanned, t: Date.now() }, k));
+
+/* ---------------- tempo + beat grid (BPM scanner) ----------------
+   Runs on the same decode as the waveform. Onset strength = spectral flux (100 frames/s, low end weighted);
+   its autocorrelation, scored with harmonics and a preference for ~120 BPM, gives the tempo; then every
+   candidate period within +-1.5 % is folded over the whole track and the one whose beats line up best gives the
+   exact BPM and where the first beat falls. The deck reads the result from localStorage 'y2k:beat'. */
+function fftIP(r, m) {
+  const n = r.length;
+  for (let i = 1, j = 0; i < n; i++) { let bit = n >> 1; for (; j & bit; bit >>= 1) j ^= bit; j ^= bit; if (i < j) { let t = r[i]; r[i] = r[j]; r[j] = t; t = m[i]; m[i] = m[j]; m[j] = t; } }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = (-2 * Math.PI) / len, wr = Math.cos(ang), wi = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let cr = 1, ci = 0;
+      for (let j = 0; j < len / 2; j++) {
+        const a = i + j, b = a + len / 2, xr = r[b] * cr - m[b] * ci, xi = r[b] * ci + m[b] * cr;
+        r[b] = r[a] - xr; m[b] = m[a] - xi; r[a] += xr; m[a] += xi;
+        const t = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = t;
+      }
+    }
+  }
+}
+function analyzeBeat(ab, hint) {
+  const sr = ab.sampleRate, ch = Math.min(2, ab.numberOfChannels), L = ab.length, FPS = 100, hop = sr / FPS, W = 256;
+  const nF = Math.floor((L - W) / hop);
+  if (nF < FPS * 8) return null; // under 8 s: not enough to judge
+  const chans = []; for (let c = 0; c < ch; c++) chans.push(ab.getChannelData(c));
+  const win = new Float32Array(W); for (let i = 0; i < W; i++) win[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (W - 1));
+  const re = new Float32Array(W), im = new Float32Array(W), prev = new Float32Array(W / 2), env = new Float32Array(nF);
+  const lowBin = Math.max(2, Math.round((250 / sr) * W));
+  for (let f = 0; f < nF; f++) {
+    const o = Math.round(f * hop);
+    for (let i = 0; i < W; i++) { let v = 0; for (let c = 0; c < ch; c++) v += chans[c][o + i]; re[i] = (v / ch) * win[i]; im[i] = 0; }
+    fftIP(re, im);
+    let flux = 0;
+    for (let k = 1; k < W / 2; k++) {
+      const mag = Math.log(1 + 100 * Math.hypot(re[k], im[k])), d = mag - prev[k];
+      if (d > 0) flux += k < lowBin ? d * 2 : d;
+      prev[k] = mag;
+    }
+    env[f] = flux;
+  }
+  // remove the slow loudness curve (1 s moving mean), keep the spikes
+  const on = new Float32Array(nF); let acc = 0; const M = FPS;
+  for (let f = 0; f < nF; f++) { acc += env[f]; if (f >= M) acc -= env[f - M]; on[f] = Math.max(0, env[f] - acc / Math.min(f + 1, M)); }
+  const maxLag = Math.round(FPS * 60 / 50) * 3 + 2, ac = new Float32Array(maxLag + 1);
+  for (let lag = 10; lag <= maxLag; lag++) { let sum = 0; for (let i = 0; i + lag < nF; i++) sum += on[i] * on[i + lag]; ac[lag] = sum / (nF - lag); }
+  const acI = (x) => { if (x < 1 || x >= maxLag) return 0; const i = Math.floor(x), t = x - i; return ac[i] * (1 - t) + ac[i + 1] * t; };
+  let lo = 60, hi = 200;
+  if (hint >= 40 && hint <= 250) { lo = hint * 0.985; hi = hint * 1.015; } // a BPM tag: trust its tempo, find the grid
+  const prior = (bpm) => (hint ? 1 : Math.exp(-0.5 * Math.pow(Math.log2(bpm / 120) / 0.9, 2)));
+  // coarse: comb-filtered autocorrelation; keep the strongest few local peaks as candidates
+  const cand = [];
+  let p2 = -1, p1 = -1;
+  for (let bpm = lo; bpm <= hi + 0.05; bpm += 0.05) {
+    const lag = (60 * FPS) / bpm;
+    const sc = (acI(lag) + 0.5 * acI(lag * 2) + 0.33 * acI(lag * 3) + 0.25 * acI(lag / 2)) * prior(bpm);
+    if (p1 > p2 && p1 >= sc) cand.push([p1, bpm - 0.05]);
+    p2 = p1; p1 = sc;
+  }
+  if (!cand.length) return null;
+  cand.sort((x, y) => y[0] - x[0]);
+  // fine: fold the onsets at each period around a candidate; the sharpest fold wins (tempo + phase together)
+  const NB = 48, hist = new Float32Array(NB);
+  const fold = (bpm) => {
+    const P = (60 * FPS) / bpm; hist.fill(0);
+    for (let f = 0; f < nF; f++) if (on[f] > 0) { const ph = (f / P) % 1; hist[Math.floor(ph * NB) % NB] += on[f]; }
+    let tot = 0, mx = -1, mi = 0;
+    for (let b = 0; b < NB; b++) { const v = hist[b] + 0.5 * (hist[(b + 1) % NB] + hist[(b + NB - 1) % NB]); tot += hist[b]; if (v > mx) { mx = v; mi = b; } }
+    return { r: mx / Math.max(1e-6, (tot * 2) / NB), ph: (mi + 0.5) / NB };
+  };
+  let fine = cand[0][1], phase = 0, top = -1, conf = 0;
+  for (const [, c] of cand.slice(0, 4)) {
+    let bb = c, br = -1, bp = 0;
+    for (let bpm = c * 0.98; bpm <= c * 1.02; bpm += 0.02) { const f = fold(bpm); if (f.r > br) { br = f.r; bb = bpm; bp = f.ph; } }
+    for (let bpm = bb - 0.03; bpm <= bb + 0.03; bpm += 0.005) { const f = fold(bpm); if (f.r > br) { br = f.r; bb = bpm; bp = f.ph; } }
+    const sc = br * Math.sqrt(prior(bb));
+    if (sc > top) { top = sc; fine = bb; phase = bp; conf = br - 1; }
+  }
+  // octave check: double tempo folds the off-beats onto the beats and looks sharper, so weigh half/double by the prior
+  if (!hint) for (const k of [0.5, 2]) {
+    const c = fine * k; if (c < 55 || c > 210) continue;
+    let bb = c, br = -1, bp = 0;
+    for (let bpm = c - 0.04; bpm <= c + 0.04; bpm += 0.005) { const f = fold(bpm); if (f.r > br) { br = f.r; bb = bpm; bp = f.ph; } }
+    if (br * prior(bb) > (conf + 1) * prior(fine) * (k < 1 ? 0.8 : 1.15)) { fine = bb; phase = bp; conf = br - 1; }
+  }
+  const period = 60 / fine, offset = ((phase * period + (W / 2) / sr) % period + period) % period;
+  return { bpm: Math.round(fine * 100) / 100, offset, conf: Math.round(conf * 100) / 100, src: hint ? 'tag' : 'scan' };
+}
+// the analysis runs in a worker so the seek bar keeps animating (a long track takes a second or two)
+function analyzeBeatAsync(ab, hint) {
+  const chans = []; for (let c = 0; c < Math.min(2, ab.numberOfChannels); c++) chans.push(ab.getChannelData(c).slice());
+  const fake = { sampleRate: ab.sampleRate, numberOfChannels: chans.length, length: ab.length };
+  return new Promise((res) => {
+    let w, url;
+    try {
+      url = URL.createObjectURL(new Blob([fftIP.toString() + analyzeBeat.toString() +
+        'onmessage = (e) => { const d = e.data, ab = Object.assign(d.ab, { getChannelData: (c) => d.chans[c] }); let r = null; try { r = analyzeBeat(ab, d.hint); } catch (x) {} postMessage(r); };'], { type: 'text/javascript' }));
+      w = new Worker(url);
+    } catch (e) { try { res(analyzeBeat(ab, hint)); } catch (x) { res(null); } return; }
+    const done = (r) => { res(r); w.terminate(); URL.revokeObjectURL(url); };
+    w.onmessage = (e) => done(e.data); w.onerror = () => done(null);
+    w.postMessage({ ab: fake, chans, hint }, chans.map((c) => c.buffer));
+  });
+}
+function publishBeat(k, beat) {
+  safe(() => localStorage.setItem('y2k:beat', JSON.stringify(Object.assign({ key: k, t: Date.now() }, beat || { none: 1 }))));
+}
 
 /* ---------------- loading a track's waveform ---------------- */
 let wave = null, key = '', job = 0, scanning = false, status = '';
@@ -86,22 +199,67 @@ async function loadWave(info) {
   wave = null; scanning = false; dirty = true; setStatus('');
   if (!info) return;
   const [path, sub, size] = info.split('|');
+  const hint = parseFloat(safe(() => H.nowPlaying('%bpm%'), '')) || 0;
   const hit = await cacheGet(info);
   if (my !== job) return;
-  if (hit) { wave = hit; dirty = true; return; }
-  if (/^[a-z][a-z0-9+.-]+:\/\//i.test(path)) { startLive('STREAM · BUILDING AS IT PLAYS'); return; }
   const ext = ((path.match(/\.([a-z0-9]+)$/i) || [])[1] || '').toLowerCase();
-  if (DECODABLE.test(ext) && !(+sub > 0) && +size > 0 && +size < 700e6) {
-    scanning = true; setStatus('SCANNING WAVEFORM…');
-    const w = await decodeWave(path, my).catch(() => null);
+  const decodable = !/^[a-z][a-z0-9+.-]+:\/\//i.test(path) && DECODABLE.test(ext) && !(+sub > 0) && +size > 0 && +size < 700e6;
+  if (hit) {
+    wave = hit; dirty = true;
+    if (hit.beat || hit.scanned || !decodable) { publishBeat(info, hit.beat); return; }
+    // never scanned (cached before the BPM scanner existed, or built live back when this file couldn't be
+    // decoded, e.g. ALAC): decode it now in the background for the beat grid and the exact waveform
+    const r = await decodeWave(path, my, hint).catch(() => null);
+    if (my !== job) return;
+    if (r) { wave = r.w; dirty = true; cachePut(info, r.w, r.beat, true); }
+    publishBeat(info, r && r.beat);
+    return;
+  }
+  if (/^[a-z][a-z0-9+.-]+:\/\//i.test(path)) { publishBeat(info, null); startLive('STREAM · BUILDING AS IT PLAYS'); return; }
+  if (decodable) {
+    scanning = true; setStatus('SCANNING WAVEFORM + BPM…');
+    const r = await decodeWave(path, my, hint).catch(() => null);
     if (my !== job) return;
     scanning = false;
-    if (w) { wave = w; dirty = true; setStatus(''); cachePut(info, w); return; }
+    if (r) { wave = r.w; dirty = true; setStatus(''); publishBeat(info, r.beat); cachePut(info, r.w, r.beat, true); return; }
   }
+  publishBeat(info, null);
   startLive('LIVE · BUILDING AS IT PLAYS');
 }
 
-async function decodeWave(path, my) {
+/* FLAC: the browser refuses a whole file over one odd metadata block (a cover picture with no MIME type, as some
+   taggers write). Every block but STREAMINFO / SEEKTABLE is relabelled PADDING in place (decoders skip padding), so
+   nothing is copied: copying a 30 MB file stalled every panel's frames at track changes */
+function flacBare(buf) {
+  const u = new Uint8Array(buf);
+  let p = 0;
+  if (u[0] === 0x49 && u[1] === 0x44 && u[2] === 0x33) p = 10 + ((u[6] << 21) | (u[7] << 14) | (u[8] << 7) | u[9]); // ID3v2 in front
+  if (String.fromCharCode(u[p], u[p + 1], u[p + 2], u[p + 3]) !== 'fLaC') return buf;
+  for (let q = p + 4, last = false; !last && q + 4 <= u.length;) {
+    last = !!(u[q] & 128);
+    const t = u[q] & 127;
+    if (t !== 0 && t !== 3) u[q] = (u[q] & 128) | 1;
+    q += 4 + ((u[q + 1] << 16) | (u[q + 2] << 8) | u[q + 3]);
+  }
+  return buf;
+}
+// ALAC decoded by alac.js in a worker, straight to 8 kHz: { ab, buf }; ab null when the .m4a isn't ALAC (AAC: buf goes to the browser)
+function alacAsync(buf) {
+  return new Promise((res) => {
+    let w, url;
+    const wrap = (r) => r && { sampleRate: r.sampleRate, numberOfChannels: r.numberOfChannels, length: r.length, getChannelData: (c) => r.chans[c] };
+    try {
+      url = URL.createObjectURL(new Blob([alacDecode.toString() +
+        'onmessage = (e) => { let r = null; try { r = alacDecode(e.data, 8000); } catch (x) {} postMessage({ r, buf: r ? null : e.data }, r ? r.chans.map((c) => c.buffer) : [e.data]); };'], { type: 'text/javascript' }));
+      w = new Worker(url);
+    } catch (e) { try { res({ ab: wrap(alacDecode(buf, 8000)), buf }); } catch (x) { res({ ab: null, buf }); } return; }
+    const done = (d) => { res({ ab: wrap(d && d.r), buf: d && d.buf }); w.terminate(); URL.revokeObjectURL(url); };
+    w.onmessage = (e) => done(e.data); w.onerror = () => done(null);
+    w.postMessage(buf, [buf]); // moved, not copied; a file that isn't ALAC (AAC) comes back for the browser decoder
+  });
+}
+
+async function decodeWave(path, my, hint) {
   const dir = Y2K.profileDir.split('/').join(BS) + BS + 'webview' + BS + 'y2k' + BS + 'wavecache';
   const name = 'w' + Date.now() + '.bin', tmp = dir + BS + name + '.part';
   safe(() => H.execute('cmd.exe', '/c (if not exist "' + dir + '" mkdir "' + dir + '") & del /q "' + dir + BS + '*.bin" 2>nul & copy /y "' + path + '" "' + tmp + '" >nul & move /y "' + tmp + '" "' + dir + BS + name + '" >nul', '', 'open', 0));
@@ -112,9 +270,15 @@ async function decodeWave(path, my) {
     if (ok) break;
   }
   if (!ok || my !== job) return null;
-  const buf = await (await fetch('wavecache/' + name, { cache: 'no-store' })).arrayBuffer();
+  let buf = await (await fetch('wavecache/' + name, { cache: 'no-store' })).arrayBuffer();
   safe(() => H.execute('cmd.exe', '/c del /q "' + dir + BS + name + '"', '', 'open', 0));
-  const ab = await new OfflineAudioContext(1, 1, 8000).decodeAudioData(buf);
+  if (my !== job) return null;
+  const ext = ((path.match(/\.([a-z0-9]+)$/i) || [])[1] || '').toLowerCase();
+  let ab = null;
+  if (/^(m4a|mp4)$/.test(ext)) { const a = await alacAsync(buf); ab = a.ab; buf = a.buf; } // Apple Lossless: the browser has no decoder for it
+  if (!ab && !buf) return null;
+  if (!ab) ab = await new OfflineAudioContext(1, 1, 8000).decodeAudioData(ext === 'flac' ? flacBare(buf) : buf);
+  const beatP = analyzeBeatAsync(ab, hint);
   const ch = Math.min(2, ab.numberOfChannels), L = ab.length, w = newWave(ch);
   let top = 0;
   const peaks = [], rmss = [];
@@ -132,7 +296,7 @@ async function decodeWave(path, my) {
   for (let c = 0; c < ch; c++) for (let b = 0; b < N; b++) {
     w.max[c][b] = Math.min(255, peaks[c][b] * gain * 255); w.rms[c][b] = Math.min(255, rmss[c][b] * gain * 255 * 1.4);
   }
-  return w;
+  return { w, beat: await beatP };
 }
 
 /* live mode: fill buckets from the visualisation stream as the track plays */
@@ -150,7 +314,7 @@ function liveFeed() {
     if (!k) continue;
     wave.max[c][b] = Math.max(wave.max[c][b], Math.min(255, m * 255)); wave.rms[c][b] = Math.max(wave.rms[c][b], Math.min(255, Math.sqrt(s / k) * 255 * 1.4));
   }
-  live.filled[b] = 1;
+  live.filled[b] = 1; live.n = (live.n || 0) + 1;
   // a fully heard track is worth keeping
   if (b > N * 0.97) { let f = 0; for (let i = 0; i < N; i++) f += live.filled[i]; if (f > N * 0.92) { cachePut(key, wave); live = null; setStatus(''); } }
 }
@@ -196,13 +360,58 @@ function showTip() {
   tip.style.left = x + 'px';
 }
 
+/* Waveform layers: unplayed colours, played colours and the played part's glow (blurred once, here, instead of every
+   frame). Rebuilt when the track, the size, the style or the colours change; a live-built waveform at most 4x/s. */
+let WL = null;
+function waveLayers(w, h, dpr, U, UH, C, HI) {
+  const filled = live && live.key === key ? live.filled : null, now = performance.now();
+  const k = [w, h, dpr, SC.seekStyle, SC.seekStereo, SC.seekGlow, U, UH, C, HI, !!filled].join('|');
+  if (WL && WL.wave === wave && WL.k === k && (!filled || WL.n === live.n || now - WL.t < 250)) return WL;
+  const style = SC.seekStyle, step = style === 'wave' ? 1 : 3, bw = style === 'wave' ? 1 : 2, cell = 3;
+  const stereo = SC.seekStereo && wave.ch > 1, mid = h / 2, half = h / 2 - 5;
+  const Pk = new Path2D(), Rm = new Path2D();
+  for (let x = 0; x < w; x += step) {
+    const b0 = Math.floor((x / w) * N), b1 = Math.max(b0 + 1, Math.floor(((x + step) / w) * N));
+    if (filled) { let any = 0; for (let b = b0; b < b1; b++) any |= filled[b]; if (!any) continue; }
+    for (let c = 0; c < (stereo ? 2 : 1); c++) {
+      let m = 0, r = 0;
+      for (let b = b0; b < b1 && b < N; b++) {
+        for (let q = stereo ? c : 0; q < (stereo ? c + 1 : wave.ch); q++) { if (wave.max[q][b] > m) m = wave.max[q][b]; if (wave.rms[q][b] > r) r = wave.rms[q][b]; }
+      }
+      m /= 255; r = Math.min(m, r / 255);
+      const hm = Math.max(1, m * half), hr = Math.max(0.5, r * half), dir = stereo ? (c === 0 ? -1 : 1) : 0;
+      const add = (path, hh) => {
+        if (style === 'led') {
+          const cells = Math.max(1, Math.floor(hh / cell));
+          for (let i = 0; i < cells; i++) {
+            const off = i * cell;
+            if (dir <= 0) path.rect(x, mid - off - cell + 1, bw, cell - 1);
+            if (dir >= 0) path.rect(x, mid + off + 1, bw, cell - 1);
+          }
+        } else if (dir < 0) path.rect(x, mid - hh, bw, hh);
+        else if (dir > 0) path.rect(x, mid + 1, bw, hh);
+        else path.rect(x, mid - hh, bw, hh * 2 + 1);
+      };
+      add(Pk, hm); add(Rm, hr);
+    }
+  }
+  const layer = (fn) => { const c = document.createElement('canvas'); c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); fn(g); return c; };
+  const un = layer((g) => { g.fillStyle = rgba(U, 0.4); g.fill(Pk); g.fillStyle = rgba(UH, 0.55); g.fill(Rm); });
+  const pl = layer((g) => { g.fillStyle = rgba(C, 0.75); g.fill(Pk); g.fillStyle = rgba(HI, 0.85); g.fill(Rm); });
+  // glow only: the shape is drawn far off the canvas and its shadow is thrown back onto it
+  const gl = SC.seekGlow ? layer((g) => { g.setTransform(dpr, 0, 0, dpr, -100000, 0); g.shadowOffsetX = 100000; g.shadowColor = rgba(C, 0.9); g.shadowBlur = 10; g.fillStyle = rgba(C, 1); g.fill(Pk); }) : null;
+  WL = { wave, k, n: filled ? live.n : 0, t: now, un, pl, gl };
+  return WL;
+}
+
 /* ---------------- drawing ---------------- */
 let lastDraw = 0, lastFrame = 0;
 function draw(now) {
   requestAnimationFrame(draw);
   loadCfg();
+  if (TH.look !== Y2K.look.caps) themeCols();
   const playing = safe(() => H.isPlaying, false), paused = safe(() => H.isPaused, false);
-  const busy = (playing && !paused) || hoverX >= 0 || dragFrac >= 0 || scanning || dirty;
+  const busy = (playing && !paused) || hoverX >= 0 || dragFrac >= 0 || scanning || dirty || level > 0.004; // keeps drawing while the glow fades out
   if (!busy && now - lastDraw < 500) return;
   const FR = lastFrame ? Math.min(8, (now - lastFrame) / (1000 / 75)) : 1; // 75 Hz frames since the last draw (refresh-rate independent decay)
   lastFrame = now; lastDraw = now; dirty = false;
@@ -216,7 +425,7 @@ function draw(now) {
   const mid = h / 2, half = h / 2 - 5;
 
   // live music level for the playhead glow
-  if (samples && playing && !paused && vis.n > 0) { let s = 0; const n = Math.min(vis.n, samples.length, 2048); for (let i = 0; i < n; i++) s += samples[i] * samples[i]; level = Math.max(level * Math.pow(0.85, FR), Math.sqrt(s / Math.max(1, n)) * 2.2); } else level *= Math.pow(0.9, FR);
+  if (samples && playing && !paused && vis.n > 0) { let s = 0; const n = Math.min(vis.n, samples.length, 2048); for (let i = 0; i < n; i++) s += samples[i] * samples[i]; level = Math.max(level * Math.pow(0.85, FR), Math.sqrt(s / Math.max(1, n)) * 2.2); } else level *= Math.pow(0.955, FR); // paused: the playhead glow dims slowly
 
   // time grid: a tick every 30 s, a label every minute
   if (SC.seekTicks && len > 0) {
@@ -237,44 +446,16 @@ function draw(now) {
       cx.fillStyle = g; cx.fillRect(x - 80, 0, 160, h);
     }
   } else {
-    const style = SC.seekStyle, step = style === 'wave' ? 1 : 3, bw = style === 'wave' ? 1 : 2, cell = 3;
-    const stereo = SC.seekStereo && wave.ch > 1, px = Math.ceil(frac * w);
-    const P = { pk: new Path2D(), rm: new Path2D(), upk: new Path2D(), urm: new Path2D() };
-    const filled = live && live.key === key ? live.filled : null;
-    for (let x = 0; x < w; x += step) {
-      const b0 = Math.floor((x / w) * N), b1 = Math.max(b0 + 1, Math.floor(((x + step) / w) * N));
-      if (filled) { let any = 0; for (let b = b0; b < b1; b++) any |= filled[b]; if (!any) continue; }
-      const played = x + bw / 2 <= px;
-      for (let c = 0; c < (stereo ? 2 : 1); c++) {
-        let m = 0, r = 0;
-        for (let b = b0; b < b1 && b < N; b++) {
-          for (let k = stereo ? c : 0; k < (stereo ? c + 1 : wave.ch); k++) { if (wave.max[k][b] > m) m = wave.max[k][b]; if (wave.rms[k][b] > r) r = wave.rms[k][b]; }
-        }
-        m /= 255; r = Math.min(m, r / 255);
-        const hm = Math.max(1, m * half), hr = Math.max(0.5, r * half);
-        const dir = stereo ? (c === 0 ? -1 : 1) : 0;
-        const add = (path, hh) => {
-          if (style === 'led') {
-            const cells = Math.max(1, Math.floor(hh / cell));
-            for (let i = 0; i < cells; i++) {
-              const off = i * cell;
-              if (dir <= 0) path.rect(x, mid - off - cell + 1, bw, cell - 1);
-              if (dir >= 0) path.rect(x, mid + off + 1, bw, cell - 1);
-            }
-          } else if (dir < 0) path.rect(x, mid - hh, bw, hh);
-          else if (dir > 0) path.rect(x, mid + 1, bw, hh);
-          else path.rect(x, mid - hh, bw, hh * 2 + 1);
-        };
-        add(played ? P.pk : P.upk, hm);
-        add(played ? P.rm : P.urm, hr);
-      }
+    // the waveform comes from cached layers (built once per track / size / colour); each frame only copies the played
+    // and unplayed slices. Drawing it (with a blurred glow) every frame got slower the further the track played.
+    const L = waveLayers(w, h, dpr, U, UH, C, HI), W = cv.width, Hd = cv.height, pxD = Math.max(0, Math.min(W, Math.round(frac * w * dpr)));
+    cx.setTransform(1, 0, 0, 1, 0, 0);
+    if (W - pxD > 0) cx.drawImage(L.un, pxD, 0, W - pxD, Hd, pxD, 0, W - pxD, Hd);
+    if (pxD > 0) {
+      if (L.gl) { cx.globalAlpha = Math.min(1, 0.5 + level * 0.8); cx.drawImage(L.gl, 0, 0, pxD, Hd, 0, 0, pxD, Hd); cx.globalAlpha = 1; }
+      cx.drawImage(L.pl, 0, 0, pxD, Hd, 0, 0, pxD, Hd);
     }
-    cx.fillStyle = rgba(U, 0.4); cx.fill(P.upk);
-    cx.fillStyle = rgba(UH, 0.55); cx.fill(P.urm);
-    if (SC.seekGlow) { cx.shadowColor = rgba(C, 0.85); cx.shadowBlur = 6 + level * 8; }
-    cx.fillStyle = rgba(C, 0.75); cx.fill(P.pk);
-    cx.shadowBlur = 0;
-    cx.fillStyle = rgba(HI, 0.85); cx.fill(P.rm);
+    cx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
   // hover ghost cursor
@@ -300,7 +481,7 @@ function draw(now) {
 function poll() {
   const playing = safe(() => H.isPlaying, false);
   const info = playing ? safe(() => H.nowPlaying('%path%|$if2(%subsong%,0)|$if2(%filesize%,0)|%length_seconds_fp%'), '') : '';
-  if (info !== key) { key = info; loadWave(info); }
+  if (info !== key) { key = info; if (!info) publishBeat('', null); loadWave(info); }
 }
 themeCols(); Y2K.onSchemeChange(themeCols);
 loadCfg();

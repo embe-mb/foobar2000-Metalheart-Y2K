@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>Metalheart Library</title>
-<link rel="stylesheet" href="common.css?v=9">
+<link rel="stylesheet" href="common.css?v=15">
 <style>
   body { display: flex; flex-direction: column; background: #121921; }
   .top { flex: none; padding: 3px 4px 4px; display: flex; flex-direction: column; gap: 5px; }
@@ -16,7 +16,7 @@
     background: linear-gradient(180deg, #2f3943, #1a2129); border: 1px solid #070a0d; box-shadow: inset 0 1px 0 rgba(255,255,255,.12); }
   .views span:hover { color: #fff; }
   .views span.on { color: rgb(var(--c0d1f02)); background: linear-gradient(180deg, rgba(255,255,255,.55), rgba(255,255,255,.08) 50%, transparent 51%), linear-gradient(180deg, var(--lime-1), var(--lime-3)); border-color: var(--lime-4); }
-  .search { flex: 1; min-width: 60px; height: 19px; border-radius: 10px; border: 1px solid #0d223a; padding: 0 8px 0 20px; outline: none; font: 11px var(--ui); color: #dfe7ef;
+  .search { flex: 1; min-width: 60px; height: 19px; border-radius: 10px; border: 1px solid var(--blue-5); padding: 0 8px 0 20px; outline: none; font: 11px var(--ui); color: #dfe7ef;
     background: #0b1016 url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='10' cy='10' r='6' fill='none' stroke='%2398a4b1' stroke-width='2.5'/><path d='M15 15l6 6' stroke='%2398a4b1' stroke-width='2.5'/></svg>") 5px center/11px no-repeat; box-shadow: inset 0 1px 3px rgba(0,0,0,.8); }
   .search:focus { border-color: var(--lime-3); box-shadow: inset 0 1px 3px rgba(0,0,0,.8), 0 0 6px var(--lime-glow); }
   .crumb { display: flex; align-items: center; gap: 6px; padding: 0 4px; min-height: 0; font: 700 11px var(--ui); color: #dbe4ee; }
@@ -29,7 +29,7 @@
   /* list views */
   .li { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; height: 26px; padding: 0 8px; border-radius: 4px; cursor: pointer; font: 12px var(--ui); color: #c8d2dc; content-visibility: auto; contain-intrinsic-size: 26px; }
   .li:nth-child(odd) { background: #161e27; }
-  .li:hover { background: linear-gradient(180deg, #3a72aa, #2c5d92); color: #fff; }
+  .li:hover { background: linear-gradient(180deg, var(--sel-0), var(--sel-1)); color: #fff; }
   .li span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .li .c { font: 400 8px/1 var(--pixel); color: var(--blue-1); letter-spacing: .08em; }
   .li:hover .c { color: #fff; }
@@ -51,18 +51,18 @@
   .detail .head { display: grid; grid-template-columns: 132px 1fr; gap: 12px; padding: 8px; align-items: center; margin-bottom: 8px; }
   .detail .big { width: 132px; height: 132px; border-radius: 6px; background: radial-gradient(circle at 50% 35%, #2b3540, #0d1116) center/cover no-repeat; position: relative; overflow: hidden; box-shadow: 0 0 0 1px #000, 0 0 0 3px rgba(197,205,214,.4), 0 6px 14px rgba(0,0,0,.6); }
   .detail .big::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(255,255,255,.26), rgba(255,255,255,.05) 48%, transparent 49%); }
-  .detail .t { font: 800 15px/1.2 var(--display); color: #18202a; text-shadow: 0 1px 0 rgba(255,255,255,.7); word-break: break-word; }
-  .detail .a { font: 700 12px/1.3 var(--ui); color: #2a3440; margin-top: 3px; }
-  .detail .m { font: 11px/1.4 var(--ui); color: #4b5562; margin-top: 3px; }
+  .detail .t { font: 800 15px/1.2 var(--display); color: var(--ink-0); text-shadow: 0 1px 0 var(--ink-sh); word-break: break-word; }
+  .detail .a { font: 700 12px/1.3 var(--ui); color: var(--ink-1); margin-top: 3px; }
+  .detail .m { font: 11px/1.4 var(--ui); color: var(--ink-2); margin-top: 3px; }
   .detail .m.ed { font: 400 8px/1.4 var(--pixel); letter-spacing: .06em; text-transform: uppercase; color: rgb(var(--c2f6b08)); }
   .btns { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px; }
   .btn { height: 21px; padding: 0 10px; border-radius: 11px; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; font: 700 9px/1 var(--ui); letter-spacing: .06em; text-transform: uppercase; color: #fff; text-shadow: 0 1px 0 rgba(0,0,0,.5);
-    background: linear-gradient(180deg, rgba(255,255,255,.5), rgba(255,255,255,.08) 50%, transparent 51%), linear-gradient(180deg, var(--blue-2), var(--blue-4)); border: 1px solid #0d223a; }
+    background: linear-gradient(180deg, rgba(255,255,255,.5), rgba(255,255,255,.08) 50%, transparent 51%), linear-gradient(180deg, var(--blue-2), var(--blue-4)); border: 1px solid var(--blue-5); }
   .btn.lime { color: rgb(var(--c0b1c01)); text-shadow: 0 1px 0 rgba(255,255,255,.5); background: linear-gradient(180deg, rgba(255,255,255,.6), rgba(255,255,255,.1) 50%, transparent 51%), linear-gradient(180deg, var(--lime-1), var(--lime-3)); border-color: var(--lime-4); }
   .btn:hover { filter: brightness(1.15); }
   .tracks .tr { display: grid; grid-template-columns: 34px 1fr auto; gap: 8px; height: 24px; align-items: center; padding: 0 8px; border-radius: 4px; font: 12px var(--ui); color: #c8d2dc; cursor: pointer; }
   .tracks .tr:nth-child(odd) { background: #161e27; }
-  .tracks .tr:hover { background: linear-gradient(180deg, #3a72aa, #2c5d92); color: #fff; }
+  .tracks .tr:hover { background: linear-gradient(180deg, var(--sel-0), var(--sel-1)); color: #fff; }
   .tracks .tr .n { color: #7d8a99; text-align: right; font-size: 11px; }
   .tracks .tr span:nth-child(2) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .tracks .dh { font: 400 8px/1 var(--pixel); color: var(--lime-2); letter-spacing: .12em; padding: 10px 8px 4px; }
@@ -73,7 +73,7 @@
   @keyframes pulse { 50% { opacity: .3; } }
   .menu { position: fixed; z-index: 50; min-width: 180px; padding: 4px; border-radius: 8px; background: linear-gradient(180deg, #2a343f, #161d25); border: 1px solid #000; box-shadow: 0 8px 22px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.12); }
   .menu div { padding: 5px 12px; border-radius: 5px; font: 12px var(--ui); color: #dbe4ee; cursor: pointer; white-space: nowrap; }
-  .menu div:hover { background: linear-gradient(180deg, #3a72aa, #2c5d92); color: #fff; }
+  .menu div:hover { background: linear-gradient(180deg, var(--sel-0), var(--sel-1)); color: #fff; }
 </style>
 </head>
 <body>
@@ -87,7 +87,7 @@
 </div>
 <div class="body" id="body"><div class="empty loading"><b>SCANNING…</b>Reading your media library</div></div>
 
-<script src="common.js?v=9"></script><script>Y2K.scopeAccent(document.body, 1); /* MULTI album colours: accent channel 1 */</script>
+<script src="common.js?v=15"></script><script>Y2K.scopeAccent(document.body, 1); /* MULTI album colours: accent channel 1 */</script>
 <script>
 'use strict';
 const { H, esc, safe } = Y2K;

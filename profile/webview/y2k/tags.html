@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Metalheart Tags</title>
+<link rel="stylesheet" href="common.css?v=15">
+<style>
+  /* Themed tag sheet (instead of Columns UI's Item Properties): every common tag, then the technical info, ReplayGain,
+     the file and the play statistics. Click a value to copy it; right-click to open foobar2000's tag editor. */
+  body { overflow-y: auto; overflow-x: hidden; padding: 8px 8px 14px; }
+  .head { display: flex; align-items: center; gap: 8px; padding: 2px 4px 8px; }
+  .head .t { flex: 1; min-width: 0; font: 700 13px/1.25 var(--ui); color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .head .s { flex: none; font: 400 7px/1 var(--pixel); letter-spacing: .12em; color: var(--text-dim); display: flex; align-items: center; gap: 5px; }
+  .head .s i { width: 6px; height: 6px; border-radius: 50%; background: var(--lime-3); box-shadow: 0 0 5px var(--lime-glow); }
+  .head .s.sel i { background: var(--blue-2); box-shadow: 0 0 5px rgba(74,134,197,.8); }
+  .sheet { margin-bottom: 10px; border-radius: 6px; overflow: hidden; border: 1px solid #000; box-shadow: 0 3px 8px rgba(0,0,0,.4); }
+  .sheet h4 { margin: 0; padding: 5px 9px; font: 400 8px/1 var(--pixel); letter-spacing: .16em; color: rgb(var(--c0d2401));
+    background: linear-gradient(180deg, var(--lime-1), var(--lime-3)); box-shadow: inset 0 1px 0 rgba(255,255,255,.5); display: flex; }
+  .sheet h4 span { margin-left: auto; opacity: .7; }
+  .row { display: grid; grid-template-columns: minmax(84px, 34%) 1fr; gap: 10px; padding: 4px 9px; font: 12px/1.35 var(--ui); cursor: copy; }
+  .row:nth-child(even) { background: rgba(255,255,255,.025); }
+  .row:nth-child(odd) { background: rgba(0,0,0,.25); }
+  .row:hover { background: rgba(var(--c9cff2e),.08); }
+  .row .k { font: 400 8px/16px var(--pixel); letter-spacing: .08em; color: var(--text-dim); text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .v { color: var(--text); word-break: break-word; white-space: pre-wrap; user-select: text; }
+  .row .v.mono { font: 11px/1.4 Consolas, monospace; color: var(--chrome-2); }
+  .row.copied .v { color: rgb(var(--ceaffc4)); }
+  .empty { padding: 30px 10px; text-align: center; color: var(--text-dim); font: 400 8px/1.6 var(--pixel); letter-spacing: .1em; }
+  .empty b { display: block; font: 900 22px/1.2 var(--display); color: var(--chrome-4); margin-bottom: 6px; }
+  .menu { position: fixed; z-index: 10; min-width: 190px; padding: 4px; border-radius: 6px; background: linear-gradient(180deg, #1d2530, #11161d); border: 1px solid #000;
+    box-shadow: 0 8px 22px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.08); font: 12px/1 var(--ui); color: #dbe4ee; }
+  .menu .it { padding: 6px 10px; border-radius: 4px; cursor: pointer; white-space: nowrap; }
+  .menu .it:hover { background: linear-gradient(180deg, var(--blue-2), var(--blue-4)); color: #fff; }
+  .menu .sep { height: 1px; margin: 4px 6px; background: rgba(255,255,255,.08); }
+</style>
+</head>
+<body>
+<div class="backdrop"></div>
+<div id="root"></div>
+
+<script>/* inside the Track Info panel this page runs in a frame: use the panel's connection to foobar2000 */
+if (window.parent !== window) try { const P = window.parent; Object.defineProperty(window, 'chrome', { value: P.chrome, configurable: true, writable: true }); window.fb2k = P.fb2k; } catch (e) {}</script>
+<script src="common.js?v=15"></script>
+<script>
+'use strict';
+const { esc, safe, H } = Y2K;
+const SEP = String.fromCharCode(30);
+// [label, title-formatting]; plain names are tags (all values, joined with "; ")
+const META = ['title', 'artist', 'album artist', 'album', 'date', 'originaldate', 'tracknumber', 'totaltracks', 'discnumber', 'totaldiscs', 'discsubtitle',
+  'genre', 'style', 'mood', 'composer', 'lyricist', 'writer', 'arranger', 'conductor', 'performer', 'producer', 'engineer', 'mixer', 'remixer',
+  'label', 'publisher', 'catalognumber', 'barcode', 'isrc', 'asin', 'media', 'releasecountry', 'releasetype', 'releasestatus', 'script', 'language',
+  'bpm', 'initialkey', 'grouping', 'work', 'movement', 'compilation', 'copyright', 'website', 'comment', 'encodedby', 'encodersettings',
+  'artists', 'artistsort', 'albumartistsort', 'titlesort', 'musicbrainz_artistid', 'musicbrainz_albumartistid', 'musicbrainz_albumid',
+  'musicbrainz_releasegroupid', 'musicbrainz_trackid', 'musicbrainz_releasetrackid', 'musicbrainz_workid', 'musicbrainz_discid', 'acoustid_id'];
+const GROUPS = [
+  ['TECHNICAL', [['Codec', '[%codec%]'], ['Profile', '[%codec_profile%]'], ['Bitrate', '[%bitrate% kbps]'], ['Sample rate', '[%samplerate% Hz]'],
+    ['Bit depth', '[$info(bitspersample) bit]'], ['Channels', '[%channels%]'], ['Encoding', '[$info(encoding)]'], ['Tool', '[$info(tool)]'],
+    ['Length', '[%length% · %length_samples% samples]'], ['Audio MD5', '[$info(md5)]']]],
+  ['REPLAYGAIN', [['Track gain', '[%replaygain_track_gain%]'], ['Track peak', '[%replaygain_track_peak%]'], ['Album gain', '[%replaygain_album_gain%]'], ['Album peak', '[%replaygain_album_peak%]']]],
+  ['FILE', [['File name', '[%filename_ext%]'], ['Folder', '[$directory_path(%path%)]'], ['Size', '[%filesize_natural%]'], ['Modified', '[%last_modified%]'], ['Subsong', '$ifgreater(%subsong%,0,%subsong%,)']]],
+  ['PLAYBACK', [['Play count', '[%play_count%]'], ['First played', '[%first_played%]'], ['Last played', '[%last_played%]'], ['Added', '[%added%]'], ['Rating', '[%rating%]']]],
+];
+const MONO = /musicbrainz|acoustid|isrc|barcode|catalog|asin|md5|folder|file name/i;
+let cur = null;
+
+function fmt(t, script) {
+  if (t._src === 'playing') return safe(() => H.nowPlaying(script), '');
+  if (t._src === 'focused') return safe(() => H.getPlaylistItemFormattedText(t._pl, t._idx, script), '');
+  return '';
+}
+function render() {
+  const t = Y2K.getTrack(); cur = t;
+  const root = document.getElementById('root');
+  if (t._src === 'none') { root.innerHTML = '<div class="empty"><b>NO SIGNAL</b>Play or select a track to read its tags</div>'; return; }
+  const metaVals = fmt(t, META.map((n) => '[$meta_sep(' + n + ',; )]').join('$char(30)')).split(SEP);
+  const all = GROUPS.flatMap(([, rows]) => rows.map((r) => r[1]));
+  const techVals = fmt(t, all.join('$char(30)')).split(SEP);
+  const rowHtml = (k, v) => '<div class="row"><div class="k" title="' + esc(k) + '">' + esc(k) + '</div><div class="v' + (MONO.test(k) ? ' mono' : '') + '">' + esc(v) + '</div></div>';
+  let h = '<div class="head"><div class="t">' + esc(t.title || t.filename) + '</div><div class="s' + (t._src === 'playing' ? '' : ' sel') + '"><i></i>' + (t._src === 'playing' ? 'NOW PLAYING' : 'SELECTED') + '</div></div>';
+  const meta = META.map((n, i) => [n, metaVals[i] || '']).filter(([, v]) => v.trim());
+  h += '<div class="sheet"><h4>METADATA<span>' + meta.length + ' FIELDS</span></h4>' + meta.map(([k, v]) => rowHtml(k.replace(/_/g, ' '), v)).join('') + '</div>';
+  let i = 0;
+  for (const [title, rows] of GROUPS) {
+    const r = rows.map(([k]) => [k, techVals[i++] || '']).filter(([, v]) => v.trim());
+    if (r.length) h += '<div class="sheet"><h4>' + title + '</h4>' + r.map(([k, v]) => rowHtml(k, v)).join('') + '</div>';
+  }
+  root.innerHTML = h;
+  root.querySelectorAll('.row').forEach((row) => {
+    row.onclick = () => { if (getSelection().toString()) return; safe(() => navigator.clipboard.writeText(row.querySelector('.v').textContent)); row.classList.add('copied'); setTimeout(() => row.classList.remove('copied'), 600); };
+  });
+}
+function ctx(name) { if (cur && cur.path) safe(() => H.execute(Y2K.exePath.split('/').join(Y2K.BS), '/context_command:"' + name + '" "' + cur.path + '"', '', 'open', 1)); }
+document.addEventListener('contextmenu', (e) => {
+  e.preventDefault(); document.querySelectorAll('.menu').forEach((m) => m.remove());
+  const m = document.createElement('div'); m.className = 'menu';
+  m.innerHTML = '<div class="it" data-a="props">Edit tags… (Properties)</div><div class="sep"></div><div class="it" data-a="copy">Copy all</div><div class="it" data-a="folder">Open containing folder</div>';
+  document.body.appendChild(m);
+  m.style.left = Math.min(e.clientX, innerWidth - m.offsetWidth - 4) + 'px'; m.style.top = Math.min(e.clientY, innerHeight - m.offsetHeight - 4) + 'px';
+  m.querySelectorAll('.it').forEach((it) => { it.onclick = () => {
+    m.remove(); const a = it.dataset.a;
+    if (a === 'props') ctx('Properties');
+    else if (a === 'folder') ctx('Open containing folder');
+    else safe(() => navigator.clipboard.writeText([...document.querySelectorAll('.row')].map((r) => r.querySelector('.k').textContent + ': ' + r.querySelector('.v').textContent).join('\n')));
+  }; });
+});
+document.addEventListener('mousedown', (e) => { if (!e.target.closest('.menu')) document.querySelectorAll('.menu').forEach((m) => m.remove()); });
+Y2K.onTrackContextChange(() => render());
+fb2k.on('playback:paused', () => render());
+render();
+</script>
+</body>
+</html>

@@ -55,6 +55,17 @@
        "Show toolbars" (that hides the menu bar too; the PREFS button in the
        control pod opens Preferences).
 
+  UPDATING
+    When the deck opens it checks the theme's GitHub page for a newer release
+    (at most once an hour). If there is one, a notice drops in at the top of the
+    deck: DOWNLOAD & INSTALL saves the new zip to your Downloads folder, then
+    CLOSE FOOBAR2000 & INSTALL closes foobar2000 and starts the new installer
+    (press INSTALL there; it restarts foobar2000 with the new version). The X
+    hides the notice for that version. You can also check any time:
+    CUSTOMIZE DECK > PERFORMANCE > Theme version > CHECK FOR UPDATE.
+    Your deck settings and caches are kept; the Metalheart layout is re-applied
+    (your old Columns UI settings are backed up first, as on a first install).
+
   REMOVING / GOING BACK
     Import another Columns UI configuration, or close foobar2000 and copy the
     backed-up foo_ui_columns.dll.cfg back into <settings folder>\configuration.
@@ -87,20 +98,37 @@
       Art priority: folder.*  >  cover.*  >  front.*  >  embedded art  >
       any other image in the folder (or a Scans/Artwork subfolder).
       The little label on the case tells you which file was used.
-    * LCD screen: title, artist (+ artist-country flag), year, album,
-      badges (CD-rip, lossless/hi-res, release country flag, media,
-      release type, label + catalog #, MusicBrainz), a karaoke line showing
-      the current synced lyric, an LCD spectrum analyser and the time readout.
+    * LCD screen: title, artist (+ artist-country flag), year (a glowing
+      segment display), album, badges (CD-rip, lossless/hi-res, release
+      country flag, media, release type, label + catalog #, MusicBrainz), a
+      karaoke line that lights the current synced lyric word by word, an LCD
+      spectrum analyser and the time readout.
+    * Top line: spinning reel, status, format, BPM (flashes on every beat),
+      MD5, a chevron chaser that sweeps once per beat, L/R meter, track no.
+    * Progress strip: click or drag anywhere on it to scan through the
+      track, mouse wheel = 5 s. Styles: BAR, TAPE (a VCR tape counter),
+      BLOCKS, COMET, or OFF.
+    * BPM SCANNER: the seek bar works out every track's tempo and where its
+      beats fall (a BPM tag is used if present), and the centerpieces, the
+      chevrons and the pod screen hit on the beat. Streams get a live
+      estimate. If beats look early or late, adjust CUSTOMIZE DECK > SCREEN >
+      BEAT SYNC > Beat timing.
     * CD RIP badge — appears ONLY when the album folder contains a ripping
       log (.log from EAC, XLD, CUERipper, dBpoweramp, whipper, Rubyripper,
       EZ CD...). Click it to open the log. Non-rip logs (e.g. audiochecker)
       are ignored.
     * Control pod: transport, volume (wheel works too), playback order
-      (click to cycle, right-click to reset), stop-after-current, stereo
-      LED VU meter, and shortcuts: PREFS, NAVIDROME, SEARCH, + MUSIC.
+      (click to cycle, right-click to reset), stop-after-current, the source
+      icon (CD, vinyl with a tonearm that follows the song, 7" single, tape,
+      MiniDisc...), oscilloscope, stereo LED VU meter, and shortcuts: PREFS,
+      NAVIDROME, SEARCH, + MUSIC, CUSTOMIZE DECK and FULL SCREEN (same as
+      F11; EXIT or Esc to leave).
+    * POD SCREEN: a pocket-LCD game that plays along to the beat — RUNNER
+      (jumps a cube on each beat), SHIP (shoots stars on the beat) or BLOB
+      (bounces on the beat; heavy bass wakes its little friend), or CYCLE.
     * Click the artist name / album name to open them on MusicBrainz.
-    * CUSTOMIZE DECK (green button in the pod) opens the deck customizer.
-      Everything applies live and is remembered:
+    * CUSTOMIZE DECK (green button in the pod) opens the deck customizer in
+      its own window. Everything applies live and is remembered:
         - THEME COLOUR: recolours every green part of the skin (lime, aqua,
           ice blue, magenta, amber, ember red), cross-fading to the new
           colour. The rainbow swatch is ALBUM ART: the colours come from the
@@ -108,28 +136,39 @@
           new album. MONO uses the cover's main colour everywhere; MULTI uses
           up to three of its colours (screen + info tabs / centerpiece,
           spectrum + media library / control pod + playlist). "APPLY TO LYRICS PANEL"
-          gives the lyrics highlight the same colour (the lyrics panel is a
-          built-in foobar2000 panel; everything else follows by itself).
-        - CENTERPIECE: ORB (liquid goo in a wireframe cage with orbit
-          rings), TOWERS (PS2-style glass data towers), HELIX (Y2K DNA double
-          helix), or CYCLE (a different one on every new track); colour,
-          speed and the orb's goo / cage / rings / belt / halo / sparks.
-        - LCD BACKGROUND: bubbles, TV static, digital rain, retro grid,
-          scan line, effect strength.
-        - Readouts, lyric ticker fade and timing offset, credits, cover
-          shine, source-medium icon, oscilloscope and VU meter on/off.
+          gives the native OpenLyrics highlight the same colour.
+        - SCREEN: which CENTERPIECE — ORB (liquid goo in a wireframe cage
+          that spins up like a top on bass-heavy songs), TOWERS (PS2-style
+          glass data towers), HELIX (Y2K DNA double helix), PYRAMID (glass
+          tiers that shatter on drops), CUBE (energy balls bouncing off the
+          walls of a glass cube on the beat), or CYCLE (a different one on
+          every new track); LCD background (bubbles, TV static, digital rain,
+          retro grid, scan line, strength); top line; track info & cover;
+          beat sync; PERFORMANCE (graphics card in use — red SOFTWARE means
+          hardware acceleration is off — and the theme version with CHECK
+          FOR UPDATE).
+        - LYRICS: lyric ticker, next-line preview, word highlight, line
+          transition (RISE / FLIP / DECODE), its length and timing offset.
+        - SEEKING: the deck's progress strip and the waveform seek bar.
+        - POD: source icon, scope, VU meter and the pod screen.
+        - THEME: LIGHT or DARK chrome, the chrome colour and the colour of
+          the headers and tabs, for every panel.
+        - ORB / TOWERS / HELIX / PYRAMID / CUBE: each centerpiece's own
+          settings. While one of these tabs is open it shows on the deck;
+          SHOW ON DECK keeps it there.
       While nothing is playing, the effects run on a demo beat so you can
       preview your changes.
 
   WAVEFORM SEEKBAR — Metalheart's own seek bar (a web panel, so it follows
     the theme colour). Click or drag to seek, mouse wheel = 5 s back/forward,
-    hover for the time under the pointer. FLAC, MP3, AAC/M4A, Ogg/Opus and
-    WAV files show their whole waveform within a second of starting (the
-    file is copied briefly into profile\webview\y2k\wavecache to be read);
-    other formats (ALAC, APE, WavPack, DSD, cue sheets, streams) draw their
-    waveform live as they play. Waveforms are remembered, so a track is only
-    scanned once. Style (bars / wave / LED), stereo halves, colours, glow and
-    time marks: CUSTOMIZE DECK > SEEK BAR.
+    hover for the time under the pointer. FLAC, MP3, AAC/M4A, ALAC, Ogg/Opus
+    and WAV files show their whole waveform within a second or two of
+    starting (the file is copied briefly into profile\webview\y2k\wavecache
+    to be read), and the same scan finds the track's BPM; other formats
+    (APE, WavPack, DSD, cue sheets, streams) draw their waveform live as they
+    play. Waveforms are remembered, so a track is only scanned once. Style
+    (bars / wave / LED), stereo halves, colours, glow and time marks:
+    CUSTOMIZE DECK > SEEKING.
 
   MEDIA LIBRARY (left) — custom browser for your whole library
     ARTISTS / ALBUMS / GENRES / YEARS views, cover grid, search box.
@@ -153,7 +192,7 @@
     Prefer the classic foobar2000 panels (tag editing, drag & drop, sorting)?
     Import layouts\Metalheart-Y2K-classic.fcl (see TIPS below).
 
-  RIGHT TABS
+  TRACK INFO (right) — themed panel with push-button tabs
     DOSSIER    Everything MusicBrainz Picard writes, organised: Release
                (label, catalog #, country + flag, type, status, media,
                script, ASIN, and a rendered EAN-13/UPC barcode), Track,
@@ -161,15 +200,25 @@
                AccurateRip, errors, checksum, this track's CRC/confidence),
                Audio/File, MusicBrainz IDs (all clickable) and Listening
                stats. Click a capsule header to collapse/expand a section.
-    LYRICS     OpenLyrics — synced lyrics (LRCLIB first, then QQ/NetEase/
-               Genius). Lyrics are cached in <settings folder>\lyrics\.
+    LYRICS     Synced lyrics that scroll with the song and light up word by
+               word (word-synced "enhanced LRC" files too). OpenLyrics finds
+               them (LRCLIB first, then QQ/NetEase/Genius) and caches them in
+               <settings folder>\lyrics\. Mouse wheel = look around.
+               Right-click: search again / manually, edit, mark as
+               instrumental, copy, text size.
     ARTIST BIO Photo, origin + flag, years active, genres, band members,
                Wikipedia biography, official/Bandcamp/Discogs/... links and a
-               full discography with Cover Art Archive covers (click to open).
-    MILKDROP   MilkDrop 2 visualiser with ~900 presets. ALT+ENTER = fullscreen
-               (ESC exits), SPACE = next preset, BACKSPACE = previous,
-               H = hard cut, F1 = help overlay.
-    TAGS       Editable tag list (Columns UI Item Properties).
+               full discography with Cover Art Archive covers. Click an album
+               to play it from your Media Library (LIBRARY badge) or your
+               Navidrome server (NAVIDROME badge — sign in with NAVIDROME +);
+               otherwise, or with Ctrl+click, it opens on MusicBrainz.
+    TAGS       Every common tag, technical info, ReplayGain, file details
+               and play stats. Click a value to copy it; right-click to open
+               foobar2000's tag editor.
+    MILKDROP   (far right key) MilkDrop 2 visualiser with ~900 presets, in
+               its own window. Double-click it for full screen, SPACE = next
+               preset, BACKSPACE = previous, H = hard cut, F1 = help overlay.
+    The classic layout keeps the native Columns UI tabs instead.
 
   Panels follow the playing track; when stopped they show the selected one.
 
@@ -184,11 +233,10 @@
     FLAC/Ogg, MP3 (ID3v2) and M4A tag names are all recognised.
   * Artist flags: taken from an ARTISTCOUNTRY tag if present, otherwise looked
     up once on MusicBrainz and cached.
-  * EAC writes its logs as UTF-16 text, which the WebView2 panel can identify
-    but not decode, so for those the Dossier shows the ripper and a
-    "View rip log" button instead of the parsed AccurateRip details. Logs
-    saved as UTF-8 (XLD, whipper, dBpoweramp, CUERipper, or EAC logs
-    re-saved as UTF-8) are fully parsed.
+  * Rip logs are parsed whether they are saved as UTF-8 or as UTF-16 (as EAC
+    writes them). A UTF-16 log is copied once, unchanged, into
+    profile\webview\y2k\logcache to be read, so the first time a new album
+    plays the badge says LOG FOUND for about a second before VERIFIED.
   * Messed up the layout? Re-import the original theme:
     File > Preferences > Display > Columns UI > "Import configuration..." and
     pick <settings folder>\webview\y2k\layouts\Metalheart-Y2K.fcl

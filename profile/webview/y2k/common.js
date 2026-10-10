@@ -221,9 +221,52 @@ const Y2K = (() => {
           ar: tg(/(Accurately ripped[^\r\n]*)/i) || tg(/AccurateRip v\d signature[^\r\n]*\r?\n\s*->\s*([^\r\n]+)/i) || tg(/(Cannot be verified as accurate[^\r\n]*)/i) || tg(/(Track not present in AccurateRip database)/i),
           status: tg(/(Copy OK|Copy finished|Suspicious position[^\r\n]*)/i),
         };
+      } else {
+        // whole-CD image rips ("Range status") have no per-track sections: use the track's AccurateRip summary line
+        const ar = text.match(new RegExp('^\\s*Track\\s+0*' + n + '\\s+((?:accurately ripped|cannot be verified|not present)[^\\r\\n]*)', 'im'));
+        if (ar) r.track = { ar: ar[1].replace(/\s+/g, ' ').trim().replace(/^./, (c) => c.toUpperCase()) };
       }
     }
     return r;
+  }
+
+  /* UTF-16 logs (what EAC writes): H.readAllText stops at the first NUL byte, and UTF-16 text has one after almost
+     every character, so only the first letter comes through. foo_webview2 can't write or download files, but the page
+     itself is served from this folder (http://foo_uie_webview.local/), where fetch() returns raw bytes. So Windows'
+     own robocopy copies the log, unchanged, into logcache\<id>\ next to the page; the page then fetches it and decodes
+     the UTF-16 itself. Each log is copied once; the copies stay as a cache (a few KB each). */
+  const utf16Text = new Map(), utf16Busy = new Set(), ripLogCbs = [];
+  const onRipLog = (cb) => ripLogCbs.push(cb);
+  const pathId = (s) => { let h = 0x811c9dc5; for (const ch of s.toLowerCase()) { h ^= ch.codePointAt(0); h = Math.imul(h, 0x01000193); } return (h >>> 0).toString(16).padStart(8, '0'); };
+  function decodeLogBytes(buf) {
+    const b = new Uint8Array(buf);
+    if (b[0] === 0xFE && b[1] === 0xFF) return new TextDecoder('utf-16be').decode(b);
+    if (b[0] === 0xFF && b[1] === 0xFE) return new TextDecoder('utf-16le').decode(b);
+    return new TextDecoder(b[1] === 0 ? 'utf-16le' : 'utf-8').decode(b);
+  }
+  async function loadUtf16Log(p, dirKey) {
+    if (utf16Busy.has(p)) return;
+    utf16Busy.add(p);
+    const id = pathId(p), name = p.slice(p.lastIndexOf('/') + 1);
+    const url = 'logcache/' + id + '/' + encodeURIComponent(name);
+    const grab = async () => { try { const r = await fetch(url, { cache: 'no-store' }); return r.ok ? decodeLogBytes(await r.arrayBuffer()) : null; } catch (e) { return null; } };
+    let text = await grab();
+    if (text === null && safe(() => H.canExecuteShellOperations, true)) {
+      // every panel runs its own copy of this file: only one of them launches the copy
+      const lock = 'logcopy:' + id, busy = +(safe(() => localStorage.getItem(lock)) || 0);
+      if (Date.now() - busy > 15000) {
+        safe(() => localStorage.setItem(lock, String(Date.now())));
+        const srcDir = p.slice(0, p.lastIndexOf('/')).split('/').join(BS);
+        const dstDir = (profileDir.replace(/\/$/, '') + '/webview/y2k/logcache/' + id).split('/').join(BS);
+        safe(() => H.execute('robocopy.exe', '"' + srcDir + '" "' + dstDir + '" "' + name + '" /R:0 /W:0 /NJH /NJS /NFL /NDL /NP', '', 'open', 0));
+      }
+      for (let i = 0; i < 40 && text === null; i++) { await new Promise((r) => setTimeout(r, 150)); text = await grab(); }
+    }
+    if (text) {
+      utf16Text.set(p, text.replace(/^﻿/, ''));
+      for (const k of [...logCache.keys()]) if (k.startsWith(dirKey + '|')) logCache.delete(k);
+      ripLogCbs.forEach((cb) => safe(() => cb(p)));
+    } else utf16Busy.delete(p); // try again next time this album comes up
   }
 
   const logCache = new Map();
@@ -243,12 +286,16 @@ const Y2K = (() => {
       if (!looksUtf16) {
         const parsed = parseRipLog(txt, t.tracknum);
         if (parsed) { out = Object.assign(parsed, { file: f.name, path: p, encoding: 'UTF-8' }); break; }
+      } else if (utf16Text.has(p)) {
+        const parsed = parseRipLog(utf16Text.get(p), t.tracknum);
+        if (parsed) { out = Object.assign(parsed, { file: f.name, path: p, encoding: 'UTF-16' }); break; }
       } else {
-        // foo_webview2 can only decode multi-byte text; read the first character via ANSI to identify the ripper
+        // not decoded yet: identify the ripper from the first character (read as ANSI) and decode in the background
         const ansi = safe(() => H.readAllText(p, 1252), '');
         const first = ansi.replace(/^ÿþ|^﻿/, '').charAt(0);
         if (UTF16_FIRST[first]) {
           out = { ripper: UTF16_FIRST[first], version: '', file: f.name, path: p, encoding: 'UTF-16', utf16: true };
+          loadUtf16Log(p, t.dir);
           break;
         }
       }
@@ -382,6 +429,31 @@ const Y2K = (() => {
     store.set(key, j);
     return j;
   }
+  /* --------------------------------------------------------------- theme updates
+     VERSION is this copy of the theme: bump it for every GitHub release and tag the release v<VERSION>.
+     checkUpdate asks GitHub for the latest release (cached an hour unless forced). */
+  const VERSION = '1.2';
+  const REPO = 'embe-mb/foobar2000-Metalheart-Y2K';
+  const verNum = (s) => String(s || '').replace(/^v/i, '').split('.').map((n) => parseInt(n, 10) || 0);
+  function isNewer(a, b) {
+    const x = verNum(a), y = verNum(b);
+    for (let i = 0; i < Math.max(x.length, y.length); i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0);
+    return false;
+  }
+  async function checkUpdate(force) {
+    let r = force ? undefined : store.get('y2k:update', DAY / 24);
+    if (!r) {
+      const res = await fetch('https://api.github.com/repos/' + REPO + '/releases/latest', { headers: { Accept: 'application/vnd.github+json' }, cache: 'no-store' });
+      if (!res.ok) throw new Error('GitHub ' + res.status);
+      const j = await res.json();
+      const a = (j.assets || []).find((x) => /^metalheart.*\.zip$/i.test(x.name || ''));
+      r = { latest: String(j.tag_name || '').replace(/^v/i, ''), page: j.html_url || 'https://github.com/' + REPO + '/releases/latest',
+        url: a ? a.browser_download_url : '', size: a ? a.size : 0, date: j.published_at || '' };
+      store.set('y2k:update', r);
+    }
+    return Object.assign({ current: VERSION, newer: !!r.url && isNewer(r.latest, VERSION) }, r);
+  }
+
   async function artistCountry(mbid) {
     if (!mbid) return '';
     const a = await mb('artist/' + mbid).catch(() => null);
@@ -395,6 +467,60 @@ const Y2K = (() => {
   const openUrl = (url) => safe(() => H.execute(url, '', '', 'open', 1));
   const openFile = (pathFwd) => safe(() => H.execute(pathFwd.split('/').join(BS), '', '', 'open', 1));
   const runCommand = (name) => safe(() => H.execute(exePath.split('/').join(BS), '/command:"' + name + '"', '', 'open', 1));
+
+  /* --------------------------------------------------------------- synced lyrics (LRC)
+     parseLRC(text) -> [{ t, s, w }] sorted by time. Plain LRC: "[01:02.50]words". Enhanced / word-synced LRC (A2,
+     as Spotify / Apple Music style files have): "<mm:ss.xx>" stamps before each word, e.g.
+     "[00:12.00]<00:12.00>Hold <00:12.40>on <00:12.90>tight<00:13.60>"; a stamp with no word after it ends the last
+     word. w = [{ t, s }] (s keeps its trailing space) for such lines, else null. [offset:+/-ms] is honoured. */
+  const LRC_T = (m, s) => +m * 60 + parseFloat(String(s).replace(':', '.'));
+  function parseLRC(text) {
+    const out = [];
+    if (!text) return out;
+    const off = +((text.match(/\[offset:\s*([+-]?\d+)\s*\]/i) || [])[1] || 0) / 1000;
+    // tag values sometimes arrive without line breaks: break before every timestamp that starts a line
+    if (!/\n/.test(text)) text = text.replace(/(?<!\])(\[\d+:\d+(?:[.:]\d+)?\])/g, '\n$1');
+    for (const raw of text.split(/\r?\n/)) {
+      const tags = [...raw.matchAll(/\[(\d+):(\d+(?:[.:]\d+)?)\]/g)];
+      if (!tags.length) continue;
+      const body = raw.replace(/\[[^\]]*\]/g, '');
+      const s = body.replace(/<\d+:\d+(?:[.:]\d+)?>/g, '').replace(/\s+/g, ' ').trim();
+      let w = null;
+      if (/<\d+:\d+(?:[.:]\d+)?>/.test(body)) {
+        w = []; let t = null, end = null;
+        for (const part of body.split(/(<\d+:\d+(?:[.:]\d+)?>)/)) {
+          const m = part.match(/^<(\d+):(\d+(?:[.:]\d+)?)>$/);
+          if (m) { t = LRC_T(m[1], m[2]) - off; end = t; continue; }
+          if (!part.trim()) continue;
+          w.push({ t, s: part.replace(/\s+/g, ' ').replace(/^ /, '') });
+        }
+        if (end !== null && w.length && w[w.length - 1].t !== end) w.end = end;
+        if (!w.length) w = null;
+      }
+      for (const m of tags) {
+        const t = Math.max(0, LRC_T(m[1], m[2]) - off);
+        out.push({ t, s, w: w && w.map((x) => ({ t: x.t === null ? t : Math.max(0, x.t), s: x.s })), end: w && w.end });
+      }
+    }
+    return out.sort((a, b) => a.t - b.t);
+  }
+  /** One line's words with start/end times: the file's own word stamps, or paced by word length within the line's slot. */
+  function lyricWords(line, nextT) {
+    if (!line || !line.s) return [];
+    const slot = Math.max(0.3, (nextT ?? line.t + 6) - line.t);
+    if (line.w && line.w.length) {
+      return line.w.map((x, i) => {
+        const nx = line.w[i + 1], t1 = nx ? nx.t : line.end ?? Math.min(line.t + slot, x.t + Math.max(0.4, x.s.length * 0.12));
+        return { s: x.s, t0: x.t, t1: Math.max(x.t + 0.05, t1) };
+      });
+    }
+    // no word stamps: sing the line over about as long as it takes to say it (never past the next line), each
+    // word getting a share of that by its length
+    const words = line.s.match(/\S+\s*/g) || [line.s];
+    const chars = words.reduce((a, x) => a + x.trim().length + 1, 0), dur = Math.min(slot * 0.92, 0.45 + chars * 0.085);
+    let t = line.t;
+    return words.map((x) => { const d = (dur * (x.trim().length + 1)) / chars, r = { s: x, t0: t, t1: t + d }; t += d; return r; });
+  }
 
   /* --------------------------------------------------------------- misc helpers */
   const fmtTime = (s) => {
@@ -563,36 +689,61 @@ const Y2K = (() => {
     if (i < 0 && create) i = safe(() => H.createPlaylist(H.playlistCount, name), -1);
     return i;
   }
-  /** Append unique file paths to a playlist (cue/subsong files are added once). */
+  /** Insert paths at the end of a playlist strictly in order. foobar2000 handles every addPath asynchronously and
+      finishes them in whatever order the files are read, so firing them all at once jumbles big albums: each path
+      is only sent once the previous one has landed. onItem(k, index) reports where path k went (a cue sheet adds
+      several items at once); alive() returning false stops a load that has been superseded. */
+  function insertInOrder(pl, paths, select, { onItem, done, alive } = {}) {
+    let k = 0;
+    const next = () => {
+      if (alive && !alive()) return;
+      if (k >= paths.length) { if (done) done(); return; }
+      const before = safe(() => H.getPlaylistItemCount(pl), 0), t0 = Date.now(), i = k++;
+      safe(() => H.addPath(pl, before, paths[i], select));
+      const wait = () => {
+        if (alive && !alive()) return;
+        if (safe(() => H.getPlaylistItemCount(pl), 0) > before) { if (onItem) onItem(i, before); next(); }
+        else if (Date.now() - t0 > 1500) next(); // unreadable file: skip it
+        else setTimeout(wait, 4);
+      };
+      wait();
+    };
+    next();
+  }
+  /** Append unique file paths to a playlist, in order (cue/subsong files are added once). */
   function addPaths(pl, paths, select = false) {
-    // foobar2000 processes insertions asynchronously, so precompute each target index
-    const uniq = [...new Set(paths.filter(Boolean))];
-    const start = safe(() => H.getPlaylistItemCount(pl), 0);
-    uniq.forEach((p, k) => safe(() => H.addPath(pl, start + k, p, select)));
+    insertInOrder(pl, [...new Set(paths.filter(Boolean))], select);
   }
   /** Replace "Library Selection" with these tracks and start playing them. */
   function playPaths(paths, startPath) { loadPaths(paths, startPath, true); }
   /** Replace "Library Selection" with these tracks; play, or just focus `startPath`. */
+  let loadJob = 0;
   function loadPaths(paths, startPath, play) {
     const pl = playlistIndexByName(LIBSEL, true);
     if (pl < 0) return;
     const uniq = [...new Set(paths.filter(Boolean))];
     if (!uniq.length) return;
     const start = Math.max(0, startPath ? uniq.indexOf(startPath) : 0);
+    // a newer load (another double-click) cancels this one, so two albums never mix
+    const job = ++loadJob, alive = () => job === loadJob;
     safe(() => H.clearPlaylist(pl));
-    // clearing and inserting are processed asynchronously by foobar2000: wait for the clear,
-    // insert from index 0, then wait until every track has landed before starting playback
+    // clearing is asynchronous too: wait for it, then insert track by track in order
     const t0 = Date.now();
-    const waitFor = (cond, then) => { if (cond() || Date.now() - t0 > 4000) then(); else setTimeout(() => waitFor(cond, then), 40); };
-    waitFor(() => safe(() => H.getPlaylistItemCount(pl), 0) === 0, () => {
-      uniq.forEach((p, k) => safe(() => H.addPath(pl, k, p, false)));
+    const cleared = () => {
+      if (!alive()) return;
+      if (safe(() => H.getPlaylistItemCount(pl), 0) !== 0 && Date.now() - t0 < 4000) { setTimeout(cleared, 10); return; }
       safe(() => { H.activePlaylist = pl; });
-      waitFor(() => safe(() => H.getPlaylistItemCount(pl), 0) >= uniq.length, () => {
-        const i = Math.min(start, Math.max(0, safe(() => H.getPlaylistItemCount(pl), 1) - 1));
+      let started = false;
+      // start playing (or focus) as soon as the chosen track has landed; the rest keep arriving behind it
+      const begin = (i) => {
+        if (started || !alive()) return;
+        started = true;
         if (play) { safe(() => H.executePlaylistDefaultAction(pl, i)); return; }
         safe(() => { H.clearPlaylistSelection(pl); H.selectPlaylistItem(pl, i); H.setFocusedPlaylistItem(pl, i); H.ensurePlaylistItemVisible(pl, i); });
-      });
-    });
+      };
+      insertInOrder(pl, uniq, false, { alive, onItem: (k, index) => { if (k === start) begin(index); }, done: () => begin(0) });
+    };
+    cleared();
   }
 
   /* ------------------------------------------------------------------ colour scheme
@@ -714,16 +865,72 @@ const Y2K = (() => {
   /** Give an element (and everything inside it) accent channel i. */
   function scopeAccent(el, i) { if (!el) return; el.setAttribute('data-accent', i); scopes.push([el, i]); used.add(i); paint(); }
   const onSchemeChange = (fn) => schemeFns.push(fn);
+
+  /* ------------------------------------------------------------------ look: finish + chrome + header colours
+     Separate from the accent scheme above. 'y2k:look' = { mode: 'light' | 'dark', chrome: id, caps: id }:
+     mode   LIGHT = the brushed silver bezels as designed; DARK = black-chrome bezels with light ink
+     chrome tints the bezel surfaces (top bar, control pod, info heads, pills, round buttons)
+     caps   recolours the steel blue: panel headers, tabs, buttons and the list selection
+     'accent' follows the theme colour. Written as CSS variables (--cr-*, --ink-*, --blue-*, --sel-*) for all panels. */
+  const LOOK_CHROME = {
+    silver: { name: 'Silver' }, ice: { name: 'Ice', h: 205, s: 0.34 }, rose: { name: 'Rose', h: 342, s: 0.3 }, gold: { name: 'Gold', h: 42, s: 0.42 },
+    mint: { name: 'Mint', h: 150, s: 0.26 }, violet: { name: 'Violet', h: 266, s: 0.3 }, accent: { name: 'Theme colour', s: 0.32 },
+  };
+  const LOOK_CAPS = {
+    steel: { name: 'Steel blue' }, ruby: { name: 'Ruby', h: 350 }, violet: { name: 'Violet', h: 272 }, emerald: { name: 'Emerald', h: 152 },
+    tangerine: { name: 'Tangerine', h: 24 }, gold: { name: 'Gold', h: 44 }, graphite: { name: 'Graphite', s: 0.1 }, accent: { name: 'Theme colour' },
+  };
+  const CR_LIGHT = ['ffffff', 'e8edf2', 'c5cdd6', '98a4b1', '6b7786', '3d4753'], CR_DARK = ['a3adb9', '5d6873', '3e4752', '2b323a', '1d232a', '07090c'];
+  const CAPS_BASE = { 'blue-0': 'cfe3f7', 'blue-1': '7fb1e3', 'blue-2': '4a86c5', 'blue-3': '2c5d92', 'blue-4': '183a60', 'blue-5': '0d223a', 'sel-0': '3a72aa', 'sel-1': '2c5d92' };
+  const INK = { light: ['1a222b', '2a3440', '3d4753', 'rgba(255,255,255,.7)', 'rgba(255,255,255,.95)'], dark: ['e6edf4', 'c3ccd6', '8e9aa8', 'rgba(0,0,0,.65)', 'rgba(255,255,255,.24)'] };
+  const lookState = () => {
+    const o = safe(() => JSON.parse(localStorage.getItem('y2k:look')), null) || {};
+    return { mode: o.mode === 'dark' ? 'dark' : 'light', chrome: LOOK_CHROME[o.chrome] ? o.chrome : 'silver', caps: LOOK_CAPS[o.caps] ? o.caps : 'steel' };
+  };
+  const accentHue = () => rgb2hsl(tint([156, 255, 46], 0))[0];
+  const lookSheet = document.createElement('style');
+  (document.head || document.documentElement).appendChild(lookSheet);
+  let lookCss = '', look = lookState();
+  function applyLook() {
+    look = lookState();
+    const ch = LOOK_CHROME[look.chrome], cp = LOOK_CAPS[look.caps], ink = INK[look.mode];
+    const chH = look.chrome === 'accent' ? accentHue() : ch.h, cpH = look.caps === 'accent' ? accentHue() : cp.h;
+    const hex = (rgb) => '#' + rgb.map((v) => v.toString(16).padStart(2, '0')).join('');
+    const surf = (x) => { // keep each shade's lightness, give it the chrome's hue
+      const rgb = hexRgb(x); if (chH == null) return '#' + x;
+      const [, s, l] = rgb2hsl(rgb); return hex(hsl2rgb(chH, Math.min(1, Math.max(s, ch.s * (1 - Math.abs(2 * l - 1) * 0.55))), l));
+    };
+    const cap = (x) => {
+      const rgb = hexRgb(x); if (cpH == null && cp.s == null) return '#' + x;
+      const [h, s, l] = rgb2hsl(rgb); return hex(hsl2rgb(cpH ?? h, Math.min(1, s * (cp.s ?? 1)), l));
+    };
+    let css = ':root{';
+    (look.mode === 'dark' ? CR_DARK : CR_LIGHT).forEach((x, i) => { css += '--cr-' + i + ':' + surf(x) + ';'; });
+    css += '--ink-0:#' + ink[0] + ';--ink-1:#' + ink[1] + ';--ink-2:#' + ink[2] + ';--ink-sh:' + ink[3] + ';--cr-hl:' + ink[4] + ';';
+    for (const [k, x] of Object.entries(CAPS_BASE)) css += '--' + k + ':' + cap(x) + ';';
+    css += '}';
+    if (css !== lookCss) { lookCss = css; lookSheet.textContent = css; document.documentElement.dataset.look = look.mode; }
+  }
+  /** Changes part of the look ({ mode, chrome, caps }); every panel follows within a moment. */
+  function setLook(patch) { safe(() => localStorage.setItem('y2k:look', JSON.stringify(Object.assign(lookState(), patch)))); applyLook(); }
+  applyLook();
+  schemeFns.push(() => { if (look.chrome === 'accent' || look.caps === 'accent') applyLook(); });
+
   applyScheme(true);
-  window.addEventListener('storage', (e) => { if (/^y2k:(scheme|schemeMode|albumPal)$/.test(e.key || '')) applyScheme(); });
+  window.addEventListener('storage', (e) => {
+    if (/^y2k:(scheme|schemeMode|albumPal)$/.test(e.key || '')) applyScheme();
+    if (e.key === 'y2k:look') applyLook();
+  });
   setInterval(applyScheme, 1500);
+  setInterval(applyLook, 1500);
 
   return {
     PALETTES, tint, applyScheme, setScheme, fadePriority, setSchemeMode, setAlbumPalette, scopeAccent, specFor, rgb2hsl, onSchemeChange,
     get scheme() { return scheme; }, get schemeMode() { return mode; },
-    thumb, embeddedArt, isArtPl, findDirArtFile, idb, addPaths, playPaths, loadPaths, playlistIndexByName, toFwd, SEP,
+    LOOK_CHROME, LOOK_CAPS, setLook, applyLook, get look() { return look; },
+    thumb, embeddedArt, isArtPl, findDirArtFile, idb, onRipLog, addPaths, playPaths, loadPaths, playlistIndexByName, toFwd, SEP,
     H, BS, esc, log, safe, getTrack, listDir, readText, readImage, resolveArt, findRipLog, parseRipLog,
-    countryName, flagHTML, flagFile, barcodeSVG, mb, getJSON, store, artistCountry, openUrl, openFile, runCommand,
-    fmtTime, qualityOf, firstOf, clean, debounce, onTrackContextChange, trackKey, profileDir, exePath, DAY,
+    countryName, flagHTML, flagFile, barcodeSVG, mb, getJSON, store, artistCountry, openUrl, openFile, runCommand, VERSION, checkUpdate,
+    fmtTime, qualityOf, firstOf, clean, debounce, onTrackContextChange, trackKey, profileDir, exePath, DAY, parseLRC, lyricWords,
   };
 })();
