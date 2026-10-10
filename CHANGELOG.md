@@ -171,6 +171,10 @@
 - The scope's last waveform shrinks into the resting ripple, and the seek bar's playhead glow fades out.
 
 **Deck layout for any window and screen**
+
+<img width="1080" height="1920" alt="Screenshot 2026-10-10 033744" src="https://github.com/user-attachments/assets/535a88ab-195f-4726-bfe0-cad0e70fa297" />
+
+
 - **Narrow windows** (for example on a vertical monitor): the cover gives up width instead of squeezing the screen. Title, album and artist run across the full width, and the centerpiece sits in the lower-right corner beside the badges and credits instead of disappearing.
 - **F11 full screen** (1080p, 1440p, 4K): the whole deck scales up so nothing is tiny, with the track info across the top and a big centerpiece below. Effects are drawn at the higher resolution so they stay sharp.
   - The left side of the top line stacks one item per line (status, format, BPM, MD5). The chevrons, L/R meter and track number stay on the right.
@@ -178,6 +182,8 @@
   - Smaller title and artist (title 52 → 40 px, artist 28 → 24 px), so normal titles fit without scrolling. Only titles that are actually too long scroll.
   - Control pod: the source icon centred on top, the oscilloscope across the pod, then the pod screen and the VU meter.
 - **Portrait full screen:** the cover and controls share the top row, and the screen with the big centerpiece fills the width below.
+  <img width="1920" height="1080" alt="Screenshot 2026-10-10 041218" src="https://github.com/user-attachments/assets/f27a4f8e-b29b-4745-92a4-031bc8865087" />
+
 
 **CUSTOMIZE DECK**
 - Opens in its own resizable window (about 1060×640) instead of squeezing into the deck, so all three columns fit in any display mode. It follows the theme colour and fades. DONE, Esc or the window's X close it. If a window can't be opened, it shows over the deck as before.
