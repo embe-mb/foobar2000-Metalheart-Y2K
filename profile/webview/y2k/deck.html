@@ -3579,6 +3579,8 @@ function gpuReadout() {
   const soft = /swiftshader|basic render|llvmpipe|software|warp/i.test(raw);
   return '<span class="gpuinfo' + (soft ? ' bad' : '') + '" title="' + esc(raw) + '">' + (soft ? 'SOFTWARE · ' : 'HARDWARE · ') + esc(name.toUpperCase()) + '</span>';
 }
+// theme-update state (see refreshUpd below); declared up here because buildCust runs at startup and reads it
+let updInfo = null, updState = '';   // updState: '' | 'checking' | 'error'
 function buildCust() {
   buildTabs();
   $('custBody').innerHTML = CUST.filter((g) => g[2] === custTab).map(([title, opts]) => '<div class="cust-grp"><h4>' + title + '</h4>' + opts.map((o) => { const [k, label, kind, tip, a, b2, st, unit] = o;
@@ -3734,7 +3736,6 @@ $('bNative').onclick = () => {
    at most hourly) and drops a notice in when there is a newer one. DOWNLOAD & INSTALL runs tools\update.ps1, which
    downloads the release zip, closes foobar2000 when you say so and starts the new package's installer.
    CUSTOMIZE DECK > PERFORMANCE > Theme version checks on demand. */
-let updInfo = null, updState = '';   // updState: '' | 'checking' | 'error'
 function startUpdate(u) {
   if (!u || !/^https:\/\/github\.com\/embe-mb\/foobar2000-Metalheart-Y2K\/releases\/download\/[^"\s]+\.zip$/.test(u.url) || !/^\d+(\.\d+)*$/.test(u.latest)) return;
   const ps1 = (Y2K.profileDir + '/webview/y2k/tools/update.ps1').split('/').join(Y2K.BS);

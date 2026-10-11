@@ -216,6 +216,7 @@
 - **The tonearm stayed tiny in full screen.** It now scales with the record.
 - **The pod screen was stretched in full screen**, which magnified the games. It keeps its normal size now.
 - **The BPM tooltip** could throw an error while the customizer's demo beat was running.
+- **The deck didn't load at all** in the first v1.2 download (reissued the same day). The new Theme version row read the updater's state before it was declared, which stopped the deck's script at startup. If you installed v1.2 before the fix and your deck is blank, run the installer from the current zip once.
 
 ### Performance
 
