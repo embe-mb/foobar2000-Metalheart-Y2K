@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>Metalheart Lyrics</title>
-<link rel="stylesheet" href="common.css?v=15">
+<link rel="stylesheet" href="common.css?v=19">
 <style>
   /* Themed lyrics view. OpenLyrics stays the engine: it searches, downloads, saves and edits; this page reads what
      it saves (and .lrc files / lyric tags) and shows it, and the right-click menu runs OpenLyrics' own commands. */
@@ -11,7 +11,9 @@
   body { overflow: hidden; padding: 0; --ls: 15px; }
   .stage { position: absolute; inset: 0; overflow: hidden; -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 16%, #000 80%, transparent 100%); mask-image: linear-gradient(180deg, transparent 0, #000 16%, #000 80%, transparent 100%); }
   .lines { position: absolute; left: 0; right: 0; top: 0; padding: 0 18px; text-align: center; transition: transform .55s cubic-bezier(.3,.7,.25,1); will-change: transform; }
-  .ln { padding: calc(var(--ls) * .32) 0; font: 600 var(--ls)/1.3 var(--ui); color: var(--text-dim); opacity: .55; transition: opacity .35s, color .35s, transform .35s, text-shadow .35s; transform-origin: 50% 50%; }
+  /* side padding: the current line is zoomed 1.12x after it has been wrapped, so every line wraps 12% narrower
+     than the panel and a long line still fits once zoomed (it used to run off both sides) */
+  .ln { padding: calc(var(--ls) * .32) 6%; font: 600 var(--ls)/1.3 var(--ui); color: var(--text-dim); opacity: .55; transition: opacity .35s, color .35s, transform .35s, text-shadow .35s; transform-origin: 50% 50%; }
   .ln.near { opacity: .8; color: var(--text); }
   .ln.past { opacity: .32; }
   .ln.gap { font-size: calc(var(--ls) * .8); letter-spacing: .4em; }
@@ -52,7 +54,7 @@
 
 <script>/* inside the Track Info panel this page runs in a frame: use the panel's connection to foobar2000 */
 if (window.parent !== window) try { const P = window.parent; Object.defineProperty(window, 'chrome', { value: P.chrome, configurable: true, writable: true }); window.fb2k = P.fb2k; } catch (e) {}</script>
-<script src="common.js?v=15"></script>
+<script src="common.js?v=19"></script>
 <script>
 'use strict';
 const { esc, safe, H } = Y2K;

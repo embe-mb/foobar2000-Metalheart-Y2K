@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>Metalheart Dossier</title>
-<link rel="stylesheet" href="common.css?v=15">
+<link rel="stylesheet" href="common.css?v=19">
 <style>
   body { overflow-y: auto; overflow-x: hidden; padding: 8px 8px 14px; }
   .hero { display: grid; grid-template-columns: 74px 1fr; gap: 10px; padding: 8px; margin-bottom: 10px; align-items: center; }
@@ -58,6 +58,12 @@
   .empty b { display: block; font: 900 22px/1.2 var(--display); color: var(--chrome-4); margin-bottom: 6px; }
   .ripok { color: var(--lime-1); font-weight: 700; }
   .ripbad { color: var(--amber); font-weight: 700; }
+  .docs { margin-top: 8px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,.06); }
+  .docs .dh { font: 400 8px/1 var(--pixel); letter-spacing: .12em; color: var(--blue-1); margin-bottom: 5px; }
+  .docs .doc { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; padding: 3px 0; font: 11px/1.3 var(--ui); }
+  .docs .dn { color: #e6edf4; font-weight: 700; }
+  .docs .df { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .docs .btn { height: 17px; }
 </style>
 </head>
 <body>
@@ -66,7 +72,7 @@
 
 <script>/* inside the Track Info panel this page runs in a frame: use the panel's connection to foobar2000 */
 if (window.parent !== window) try { const P = window.parent; Object.defineProperty(window, 'chrome', { value: P.chrome, configurable: true, writable: true }); window.fb2k = P.fb2k; } catch (e) {}</script>
-<script src="common.js?v=15"></script>
+<script src="common.js?v=19"></script>
 <script>
 'use strict';
 const { esc, safe } = Y2K;
@@ -121,10 +127,16 @@ function render() {
     kvRow('Released', dateRange(t)),
     kvRow('Label', txt(t.label)),
     kvRow('Catalog #', mono(t.catalognumber)),
-    kvRow('Country', cc ? Y2K.flagHTML(cc) + ' ' + esc(Y2K.countryName(cc)) + ' <span class="muted">(' + esc(cc.toUpperCase()) + ')</span>' : ''),
+    kvRow('Country', t.countryText ? (cc ? Y2K.flagHTML(cc) + ' ' : '') + esc(t.countryText)
+      : cc ? Y2K.flagHTML(cc) + ' ' + esc(Y2K.countryName(cc)) + ' <span class="muted">(' + esc(cc.toUpperCase()) + ')</span>' : ''),
     kvRow('Type', txt(t.releasetype)),
     kvRow('Status', txt(t.releasestatus)),
-    kvRow('Media', txt(t.media)),
+    kvRow('Media', txt(t.mediaDetail || t.media)),
+    kvRow('Classification', txt(t.classification)),
+    kvRow('Publish format', txt(t.pubformat)),
+    kvRow('Event', txt(t.event)),
+    kvRow('Distributor', txt(t.distributor)),
+    kvRow('Manufacturer', txt(t.manufacturer)),
     kvRow('Disc', t.discnumber ? esc(t.discnumber) + (t.totaldiscs ? ' of ' + esc(t.totaldiscs) : '') + (t.discsubtitle ? ' — ' + esc(t.discsubtitle) : '') : ''),
     kvRow('Tracks', esc(t.totaltracks)),
     kvRow('Script', esc(t.script)),
@@ -159,6 +171,7 @@ function render() {
     kvRow('Arranger', txt(t.arranger)), kvRow('Producer', txt(t.producer)), kvRow('Engineer', txt(t.engineer)),
     kvRow('Mixer', txt(t.mixer)), kvRow('DJ-mixer', txt(t.djmixer)), kvRow('Remixer', txt(t.remixer)),
     kvRow('Conductor', txt(t.conductor)), kvRow('Performer', txt(t.performer)),
+    kvRow('Involved', txt(t.involved)),
     kvRow('Copyright', txt(t.copyright)), kvRow('License', txt(t.license)),
   ]));
 
@@ -180,6 +193,10 @@ function render() {
       kvRow('This track', rip.track ? [rip.track.ar, rip.track.copyCRC && 'CRC ' + rip.track.copyCRC, rip.track.peak && 'peak ' + rip.track.peak, rip.track.status].filter(Boolean).map(esc).join(' · ') : ''),
       kvRow('Log file', esc(rip.file) + (rip.utf16 ? ' <span class="muted">(UTF-16 — open to read the full report)</span>' : '')),
     ]);
+    // other rip documentation in the folder (CUETools .accurip, a second ripper's log ...): listed, not used for the badge
+    if (rip.others.length) r += '<div class="docs"><div class="dh">ALSO IN THIS FOLDER</div>' + rip.others.map((d, i) =>
+      '<div class="doc"><span class="dn">' + esc(d.ripper + (d.version ? ' ' + d.version : '')) + '</span><span class="df">' + esc([d.file, d.ar].filter(Boolean).join(' · ')) + '</span>' +
+      '<span class="btn" data-doc="' + (i + 1) + '">View</span></div>').join('') + '</div>';
     r += '<div class="btnrow"><span class="btn lime" id="openLog">View rip log</span></div>';
     h += box('rip', 'CD Rip · Verified Source', r, { lime: true });
   }
@@ -218,6 +235,14 @@ function render() {
   if (mbBody) mbBody = '<div style="font-family:Consolas,monospace;font-size:10.5px">' + mbBody + '</div>';
   h += box('mb', 'MusicBrainz', mbBody, { count: t.mb_release ? 'PICARD TAGGED' : '' });
 
+  // ---------- other tag sources (Discogs, VGMdb, Bandcamp ...): MusicBrainz stays first when both are present
+  const hasMB = t.sources.some((s) => s.id === 'mb');
+  for (const s of t.sources.filter((x) => x.id !== 'mb')) {
+    const rows = s.ids.filter(([, v, u]) => v && u).map(([l, v, u]) => kvRow(l, link(v, u)));
+    if (!rows.length && s.url) rows.push(kvRow('Page', link(s.url.replace(/^https?:[/][/](www[.])?/, ''), s.url)));
+    h += box('src-' + s.id, s.name, '<div style="font-family:Consolas,monospace;font-size:10.5px">' + kv(rows) + '</div>', { count: hasMB ? 'ALSO TAGGED' : 'TAG SOURCE' });
+  }
+
   // ---------- listening
   const stars = +t.rating ? '<span class="stars">' + '★'.repeat(+t.rating) + '<span style="opacity:.25">' + '★'.repeat(Math.max(0, 5 - +t.rating)) + '</span></span>' : '';
   h += box('stats', 'Listening', '<div class="stat">' +
@@ -227,6 +252,7 @@ function render() {
     '</div>' + (stars ? '<div style="text-align:center;margin-top:8px;font-size:16px">' + stars + '</div>' : ''));
 
   // ---------- comment
+  if (t.notes) h += box('notes', 'Release Notes', '<div style="white-space:pre-wrap;user-select:text">' + esc(t.notes) + '</div>');
   if (t.comment) h += box('comment', 'Comment', '<div style="white-space:pre-wrap;user-select:text">' + esc(t.comment) + '</div>');
 
   root.innerHTML = h;
@@ -240,7 +266,8 @@ function render() {
   });
   root.querySelectorAll('[data-url]').forEach((a) => a.onclick = () => Y2K.openUrl(a.dataset.url));
   root.querySelectorAll('[data-open]').forEach((a) => a.onclick = () => Y2K.openFile(a.dataset.open));
-  const ol = document.getElementById('openLog'); if (ol) ol.onclick = () => Y2K.openFile(rip.path);
+  const ol = document.getElementById('openLog'); if (ol) ol.onclick = () => Y2K.showRipLog(rip, t.tracknum);
+  root.querySelectorAll('[data-doc]').forEach((b) => b.onclick = () => Y2K.showRipLog(rip, t.tracknum, +b.dataset.doc));
 }
 
 Y2K.onTrackContextChange(() => render());

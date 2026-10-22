@@ -141,7 +141,9 @@
           that spins up like a top on bass-heavy songs), TOWERS (PS2-style
           glass data towers), HELIX (Y2K DNA double helix), PYRAMID (glass
           tiers that shatter on drops), CUBE (energy balls bouncing off the
-          walls of a glass cube on the beat), or CYCLE (a different one on
+          walls of a glass cube on the beat), REACTOR (a speaker cabinet:
+          woofers boom on the bass, spikes jet out on the treble, its core
+          fires beams through the seams), or CYCLE (a different one on
           every new track); LCD background (bubbles, TV static, digital rain,
           retro grid, scan line, strength); top line; track info & cover;
           beat sync; PERFORMANCE (graphics card in use — red SOFTWARE means
@@ -153,7 +155,7 @@
         - POD: source icon, scope, VU meter and the pod screen.
         - THEME: LIGHT or DARK chrome, the chrome colour and the colour of
           the headers and tabs, for every panel.
-        - ORB / TOWERS / HELIX / PYRAMID / CUBE: each centerpiece's own
+        - ORB / TOWERS / HELIX / PYRAMID / CUBE / REACTOR: each centerpiece's own
           settings. While one of these tabs is open it shows on the deck;
           SHOW ON DECK keeps it there.
       While nothing is playing, the effects run on a demo beat so you can
@@ -172,6 +174,13 @@
 
   MEDIA LIBRARY (left) — custom browser for your whole library
     ARTISTS / ALBUMS / GENRES / YEARS views, cover grid, search box.
+    A letter rail down the left jumps through long lists (click or drag).
+    ALBUMS sorts: ALL (A-Z), YEAR (earliest or latest first), RANDOM,
+    RECENTLY ADDED and RECORD LABEL (each label's releases by date or by
+    catalogue number; click a label's header for just its releases).
+    Click an artist's name anywhere (here or in Library Selection) to see
+    everything they're on, and a label's name on an album page for that
+    label. Each view remembers where you were, even after a restart.
     Click an album for its tracklist and PLAY / + ADD / NEW PLAYLIST / FOLDER.
     Double-click a cover or track to load it into "Library Selection" without
     interrupting what's playing, then double-click it there to play. PLAY
@@ -200,6 +209,11 @@
                AccurateRip, errors, checksum, this track's CRC/confidence),
                Audio/File, MusicBrainz IDs (all clickable) and Listening
                stats. Click a capsule header to collapse/expand a section.
+               Albums tagged from Discogs or VGMdb (e.g. with Mp3tag) fill
+               in what MusicBrainz tags leave empty, with their own source
+               boxes and links. Rip logs: EAC, XLD, CUERipper, dBpoweramp,
+               whipper and CUETools (.accurip); VIEW RIP LOG opens the log
+               in its own window, one tab per log in the album folder.
     LYRICS     Synced lyrics that scroll with the song and light up word by
                word (word-synced "enhanced LRC" files too). OpenLyrics finds
                them (LRCLIB first, then QQ/NetEase/Genius) and caches them in

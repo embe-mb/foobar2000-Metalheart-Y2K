@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>Metalheart Deck</title>
-<link rel="stylesheet" href="common.css?v=15">
+<link rel="stylesheet" href="common.css?v=19">
 <style>
   body { display: flex; flex-direction: column; padding: 6px 8px 8px; gap: 6px; }
 
@@ -48,7 +48,7 @@
     box-shadow: inset 1px 1px 0 rgba(255,255,255,.55), inset -1px -1px 0 rgba(0,0,0,.3), inset 0 0 0 1px rgba(255,255,255,.06); }
 
   /* LCD */
-  .lcd.main-lcd { display: grid; grid-template-rows: auto 1fr auto; padding: 10px 14px 10px; min-width: 0; }
+  .lcd.main-lcd { display: grid; grid-template-rows: auto auto 1fr auto; padding: 10px 14px 10px; min-width: 0; }
   .lcd-top { display: flex; align-items: center; gap: 10px; font: 400 8px/1 var(--pixel); letter-spacing: .1em; color: rgb(var(--c8fcf4f)); position: relative; z-index: 1; }
   .lcd-top .state { color: var(--lcd-fg); display: flex; align-items: center; gap: 6px; }
   .lcd-top .state i { width: 7px; height: 7px; background: var(--lcd-fg); box-shadow: 0 0 6px var(--lime-glow); }
@@ -68,7 +68,12 @@
   @keyframes blink { 50% { opacity: .15; } }
   .lcd-top .pos { color: var(--lcd-fg); }
   .lcd-top .ltl { display: contents; } /* the left-hand readouts; full screen stacks them line by line */
-  /* MD5 readout: digits scramble with the music and settle back to the real hash */
+  /* MD5 readout: digits scramble with the music and settle back to the real hash. It has a line of its own under
+     NOW PLAYING (lined up with the text, past the reel icon), so the top line keeps its room */
+  .lcd-sub { display: flex; min-width: 0; margin-top: 5px; padding-left: 17px; font: 400 8px/1 var(--pixel); letter-spacing: .1em; position: relative; z-index: 1; }
+  body.no-reel .lcd-sub { padding-left: 13px; }
+  body.tall .lcd-sub { padding-left: 0; margin-top: 6px; }   /* full screen stacks the top line, flush left: MD5 joins the column */
+  .lcd-sub .md5 { min-width: 0; overflow: hidden; }
   .md5 { display: flex; align-items: center; gap: 5px; white-space: nowrap; color: rgba(var(--c8fcf4f),.75); }
   .md5 .k { color: rgba(var(--c8fcf4f),.5); }
   .md5 .h i { font-style: normal; transition: color .12s; }
@@ -84,7 +89,6 @@
   .bpm.est #bpm { opacity: .7; }
   .bpm.hit #bpm { color: rgb(var(--ceaffc4)); text-shadow: 0 0 6px var(--lime-glow); transition: none; }
   body.idle .bpm, body.no-bpm .bpm { display: none; }
-  body.mid .md5 { display: none; }
   body.idle .md5 { display: none; }
   .lcd-body { display: grid; grid-template-columns: 1fr auto auto; gap: 14px; min-height: 0; position: relative; z-index: 1; }
   .meta { min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 3px; }
@@ -134,7 +138,9 @@
   .lyric.tr-decode .lw span { transform: none; transition: opacity calc(var(--lf, .6s) * .35) ease; }
   .lyric.tr-decode .lw span.in { opacity: 1; }
   /* word highlight: each word fills with the bright colour as it is sung (--p, set by the script) */
-  .lyric .w { font-style: inherit; }
+  /* the line is italic, so each word's last letter leans past the word's box, and the fill (clipped to that box)
+     shaved it off: the padding gives the fill room, the negative margin keeps the spacing exactly as before */
+  .lyric .w { font-style: inherit; padding-right: .2em; margin-right: -.2em; }
   body:not(.no-karaoke) #lyric .w { background: linear-gradient(90deg, rgb(var(--cf4ffe0)) var(--p, 0%), rgba(var(--c9cff2e), .55) var(--p, 0%));
     -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
   /* the upcoming line, dimmer and smaller, under the current one (the hidden note keeps the two lines aligned) */
@@ -263,10 +269,16 @@
   body.portrait .strip { height: 22px; }
   /* full screen: the top line's readouts (status, format, BPM, MD5) stack line by line on the left; the chevrons,
      L/R meter and track number stay on the right */
-  body.tall .lcd-top { align-items: flex-start; }
-  body.tall .lcd-top .ltl { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; flex: 1; min-width: 0; }
-  body.tall .lcd-top .ltl > * { max-width: 100%; }
-  body.tall .lcd-top .chev, body.tall .lcd-top .lrm { margin-top: -1px; }
+  /* a grid, so the right-hand readouts only take the first line and the format line below gets the full width
+     (as a column beside them it was cut short while the space under the meter sat empty) */
+  body.tall .lcd-top { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; column-gap: 10px; row-gap: 6px; align-items: center; justify-items: start; }
+  body.tall .lcd-top .ltl { display: contents; }
+  body.tall .lcd-top .state { grid-area: 1 / 1; }
+  body.tall .lcd-top .chev { grid-area: 1 / 2; margin: -1px 0 0; }
+  body.tall .lcd-top .lrm { grid-area: 1 / 3; margin: -1px 0 0; }
+  body.tall .lcd-top .pos { grid-area: 1 / 4; }
+  body.tall .lcd-top #codecline { grid-column: 1 / -1; grid-row: 2; max-width: 100%; }
+  body.tall .lcd-top .bpm { grid-column: 1 / -1; grid-row: 3; }
   body.tall .title { font-size: 40px; }
   body.tall .artist { font-size: 24px; }
   /* full screen pod: the source icon centred on top, the oscilloscope across the pod under it, then the pod screen
@@ -339,6 +351,9 @@
   .cust-tabs .note { margin-left: auto; font: 400 8px/1 var(--pixel); letter-spacing: .1em; color: var(--text-dim); white-space: nowrap; }
   .cust-tabs .note b { color: var(--amber); font-weight: 400; }
   .cust-tabs .chip { margin: 0 0 4px 8px; }
+  /* a narrow window: tighter tabs, and they wrap to a second row rather than running off the edge */
+  .cust.two .cust-tabs { flex-wrap: wrap; row-gap: 2px; }
+  .cust.two .cust-tabs i { padding: 0 8px; }
   /* LED toggle switch */
   .tog { flex: none; width: 34px; height: 16px; border-radius: 8px; position: relative; cursor: pointer;
     background: linear-gradient(180deg, #05080a, #1a2129); box-shadow: inset 0 1px 3px #000, 0 1px 0 rgba(255,255,255,.12); }
@@ -583,12 +598,12 @@
         <div class="state"><i></i><svg class="reel" id="reel" viewBox="-10 -10 20 20"><path fill-rule="evenodd" d="M9.6 0A9.6 9.6 0 1 0 -9.6 0A9.6 9.6 0 1 0 9.6 0ZM0.00 -3.10L-4.41 -6.79Q0.00 -8.90 4.41 -6.79ZM2.68 1.55L8.09 -0.42Q7.71 4.45 3.68 7.22ZM-2.68 1.55L-3.68 7.22Q-7.71 4.45 -8.09 -0.42ZM1.4 0A1.4 1.4 0 1 0 -1.4 0A1.4 1.4 0 1 0 1.4 0Z"/></svg><span id="state">NO DISC</span></div>
         <span id="codecline"></span>
         <span class="bpm" id="bpmwrap"><span class="k">BPM:</span><span id="bpm">---</span></span>
-        <span class="md5" id="md5wrap" title="Audio MD5 (from the file's stream info)"><span class="k">MD5</span><span class="h" id="md5"></span></span>
       </div>
       <svg class="chev" id="chev" viewBox="0 0 98.5 10"><path d="M1 1.5L5 5L1 8.5"/><path d="M7.5 1.5L11.5 5L7.5 8.5"/><path d="M14 1.5L18 5L14 8.5"/><path d="M20.5 1.5L24.5 5L20.5 8.5"/><path d="M27 1.5L31 5L27 8.5"/><path d="M33.5 1.5L37.5 5L33.5 8.5"/><path d="M40 1.5L44 5L40 8.5"/><path d="M46.5 1.5L50.5 5L46.5 8.5"/><path d="M53 1.5L57 5L53 8.5"/><path d="M59.5 1.5L63.5 5L59.5 8.5"/><path d="M66 1.5L70 5L66 8.5"/><path d="M72.5 1.5L76.5 5L72.5 8.5"/><path d="M79 1.5L83 5L79 8.5"/><path d="M85.5 1.5L89.5 5L85.5 8.5"/><path d="M92 1.5L96 5L92 8.5"/></svg>
       <span class="lrm" title="Left / right channel peak levels"><b>L</b><canvas id="lrm"></canvas><b>R</b></span>
       <span class="pos" id="trk"></span>
     </div>
+    <div class="lcd-sub"><span class="md5" id="md5wrap" title="Audio MD5 (from the file's stream info)"><span class="k">MD5</span><span class="h" id="md5"></span></span></div>
     <div class="lcd-body">
       <div class="meta">
         <div class="title" id="title"><span>INSERT MUSIC</span></div>
@@ -662,7 +677,7 @@
   </div>
 </div>
 
-<script src="common.js?v=15"></script>
+<script src="common.js?v=19"></script>
 <script>
 /* ---------------- fitting the deck to its window ----------------
    The deck is laid out for a strip about 420 px high. In a narrow window (e.g. on a vertical monitor) the cover
@@ -712,6 +727,7 @@ const CFG_DEF = {
   hxRing: 'blades', hxStrings: 1, hxSwell: true, hxUnzip: true, hxLetters: true, hxPulses: true,              // helix
   pyStyle: 'glass', pyRipple: 1, pyLevitate: 1, pyCounter: true, pyCore: true, pyBeam: true, pyShatter: true, pyGlyphs: true, // pyramid
   cbBalls: 1, cbTesla: true, cbTrails: true, cbSpeed: 1, cbStyle: 'glass', cbRipple: 1, cbPanels: 1, cbCam: 'orbit', cbSats: 1, cbRail: true,      // cube
+  rxBoom: 1, rxSpike: 1, rxAir: true, rxBeams: 'bar', rxSep: 1, rxStyle: 'metal', rxCam: 'orbit',                  // reactor
   bubbles: true, static: false, matrix: false, grid: false, scan: true, bgStrength: 1,
   spec: true, lrm: true, md5: true, decode: true, badges: true,
   lyric: true, lyricNext: true, lyricFade: 0.6, lyricOffset: 0, credits: true, sweep: true, media: true, scope: true, vu: true,
@@ -820,7 +836,7 @@ function render() {
   const b = [];
   if (rip) {
     const okTxt = rip.utf16 ? 'LOG FOUND' : rip.ok ? 'VERIFIED' : 'LOGGED';
-    b.push('<span class="pill lime clickable" id="ripBadge" title="' + esc('Ripped from CD — ' + rip.ripper + (rip.version ? ' ' + rip.version : '') + (rip.ar ? '\nAccurateRip: ' + rip.ar : '') + '\nLog: ' + rip.file + '\nClick to open the log') + '"><span class="dot"></span>CD RIP · ' + esc(rip.ripper) + ' · ' + okTxt + '</span>');
+    b.push('<span class="pill lime clickable" id="ripBadge" title="' + esc('Ripped from CD — ' + rip.ripper + (rip.version ? ' ' + rip.version : '') + (rip.ar ? '\nAccurateRip: ' + rip.ar : '') + '\nLog: ' + rip.file + '\nClick to view the log') + '"><span class="dot"></span>CD RIP · ' + esc(rip.ripper) + ' · ' + okTxt + '</span>');
   }
   if (q.lossless) b.push('<span class="pill blue">' + (q.hires ? 'HI-RES ' : '') + 'LOSSLESS ' + (q.bits ? q.bits + '/' : '') + (q.khz || '') + '</span>');
   else if (t.codec) b.push('<span class="pill">' + esc(t.codec) + (t.bitrate ? ' ' + t.bitrate + 'K' : '') + '</span>');
@@ -831,7 +847,7 @@ function render() {
   if (t.mb_release) b.push('<span class="pill blue clickable" id="mbBadge" title="Tagged with MusicBrainz Picard — open release">MB ✓</span>');
   if (t.playcount && +t.playcount > 0) b.push('<span class="pill">PLAYS ' + esc(t.playcount) + '</span>');
   $('badges').innerHTML = b.join('');
-  const rb = $('ripBadge'); if (rb) rb.onclick = () => Y2K.openFile(rip.path);
+  const rb = $('ripBadge'); if (rb) rb.onclick = () => Y2K.showRipLog(rip, t.tracknum);
   const mbb = $('mbBadge'); if (mbb) mbb.onclick = () => Y2K.openUrl('https://musicbrainz.org/release/' + t.mb_release);
 
   // artist flag
@@ -1791,7 +1807,7 @@ function drawOrb(active) {
   }
 
   if (piece !== 'orb') {
-    ({ towers: drawTowers, helix: drawHelix, pyramid: drawPyramid, cube: drawCube })[piece](w, h, S, dt, active, hit, pal);
+    ({ towers: drawTowers, helix: drawHelix, pyramid: drawPyramid, cube: drawCube, reactor: drawReactor })[piece](w, h, S, dt, active, hit, pal);
     sparkFx(cxm, cym, R, S, dt, C, HI, false); ox.globalAlpha = 1;
     return;
   }
@@ -1946,8 +1962,8 @@ function drawOrb(active) {
   sparkFx(cxm, cym, R, S, dt, C, HI); ox.globalAlpha = 1;
 }
 
-/* ---------------- centerpiece choice (orb / data towers / DNA helix / pyramid, or cycle one per track) ---------------- */
-const PIECES = ['orb', 'towers', 'helix', 'pyramid', 'cube'];
+/* ---------------- centerpiece choice (orb / data towers / DNA helix / pyramid / cube / reactor, or cycle one per track) ---------------- */
+const PIECES = ['orb', 'towers', 'helix', 'pyramid', 'cube', 'reactor'];
 let cycleIdx = 0, pieceKey = null, shownPiece = '', pieceFade = 1;
 const deckPiece = () => (CFG.piece === 'cycle' ? PIECES[cycleIdx % PIECES.length] : PIECES.includes(CFG.piece) ? CFG.piece : 'orb');
 // while a centerpiece's own customizer tab is open, that piece is previewed on the deck
@@ -2869,6 +2885,343 @@ function drawCube(w, h, S, dt, active, hit, pal) {
   rail(true); sats(true);
 }
 
+/* REACTOR — an icosahedral speaker cabinet with a core of light inside.
+   It stands on a corner, so it is 5-fold symmetric about the vertical and its 20 triangles fall into four rings of
+   five: the top cap, the upper band, the lower band and the bottom cap. Spikes on the top cap (a crown) and the lower
+   band, woofers on the upper band and the bottom cap, so every spike sits opposite a woofer (10 of each). The
+   woofers boom out on bass hits (a pressure ring and a puff of dust leave them); each spike follows its own slice of
+   the treble and jets out on that slice's peaks. The core glows through the seams between the panels; when it fires
+   (every bar, every beat or only on drops) the panels part and it shoots short beams out through the seams and
+   corners. */
+const RX = (() => {
+  const p = (1 + Math.sqrt(5)) / 2;
+  const nrm = (v) => { const l = Math.hypot(v[0], v[1], v[2]); return [v[0] / l, v[1] / l, v[2] / l]; };
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  let V = [];   // the 12 corners: cyclic permutations of (0, +-1, +-p), scaled to unit circumradius below
+  for (const a of [-1, 1]) for (const b of [-1, 1]) V.push([0, a, b * p], [a, b * p, 0], [b * p, 0, a]);
+  // stand it on a corner: the corner (0, 1, p) turns to point straight up ...
+  const th = Math.atan2(p, 1), ct = Math.cos(th), st = Math.sin(th);
+  const up = (v) => [v[0], v[1] * ct + v[2] * st, -v[1] * st + v[2] * ct];
+  V = V.map((v) => nrm(up(v)));
+  // the faces: every three corners that are all one edge apart
+  const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]), edge = Math.min(...V.slice(1).map((v) => dist(V[0], v)));
+  const near = (a, b) => Math.abs(dist(V[a], V[b]) - edge) < 1e-6, tris = [];
+  for (let i = 0; i < 12; i++) for (let j = i + 1; j < 12; j++) for (let k = j + 1; k < 12; k++) if (near(i, j) && near(j, k) && near(i, k)) tris.push([i, j, k]);
+  // ... and it turns about the vertical until a face of the upper band looks at the camera
+  const cen = (t) => nrm([0, 1, 2].map((d) => (V[t[0]][d] + V[t[1]][d] + V[t[2]][d]) / 3));
+  const f0 = cen(tris.find((t) => { const y = cen(t)[1]; return y > 0 && y < 0.5; })), ph = Math.atan2(f0[0], f0[2]) - Math.PI, cph = Math.cos(ph), sph = Math.sin(ph);
+  const turn = (v) => [v[0] * cph - v[2] * sph, v[1], v[0] * sph + v[2] * cph];
+  V = V.map(turn);
+  const F = tris.map((vi) => {
+    const c = [0, 1, 2].map((d) => (V[vi[0]][d] + V[vi[1]][d] + V[vi[2]][d]) / 3), n = nrm(c);
+    const rel = (i) => V[i].map((x, d) => x - c[d]), u = nrm(rel(vi[0])), w = cross(n, u);
+    vi.sort((a, b) => Math.atan2(dot(rel(a), w), dot(rel(a), u)) - Math.atan2(dot(rel(b), w), dot(rel(b), u)));
+    const cap = Math.abs(n[1]) > 0.5;
+    return { n, c, u, w, vi, spk: cap ? n[1] < 0 : n[1] > 0, cap, az: Math.atan2(n[0], -n[2]),
+      b: [0, 4], lv: 0, exc: 0, excV: 0, ext: 0, extV: 0, avg: 0, last: 0 };
+  });
+  // bands, each ring sorted round the vertical: the lower-band spikes split the upper treble between them, the
+  // crown the very top; the upper-band woofers wobble with the low mids, the bottom cap is the sub
+  const ring = (spk, cap) => F.filter((f) => f.spk === spk && f.cap === cap).sort((a, b) => a.az - b.az);
+  ring(false, false).forEach((f, i) => { f.b = [16 + i, 19 + i]; });
+  ring(false, true).forEach((f, i) => { f.b = [21 + i, 24 + i]; });
+  ring(true, false).forEach((f, i) => { f.b = [2 + i, 6 + i]; });
+  ring(true, true).forEach((f, i) => { f.b = [i % 2, 3 + (i % 2)]; f.base = true; });
+  // beams leave through the corners (where five seams meet) and the middle of every seam
+  const seen = new Set(), rays = V.map((v) => ({ d: v, r: 1, k: 1 }));
+  for (const f of F) for (let i = 0; i < f.vi.length; i++) {
+    const a = f.vi[i], b = f.vi[(i + 1) % f.vi.length], key = Math.min(a, b) + '_' + Math.max(a, b);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const m = [0, 1, 2].map((d) => (V[a][d] + V[b][d]) / 2);
+    rays.push({ d: nrm(m), r: Math.hypot(m[0], m[1], m[2]), k: 0.7 });
+  }
+  return { V, F, rays };
+})();
+const RX_CAMS = { orbit: -0.38, front: -0.2, tumble: -0.3 };   // camera pitch (negative: looking down from above)
+const RX_PER = 5, RX_GREY = [128, 133, 140], RX_LIGHT = (() => { const l = Math.hypot(-0.5, 0.75, -0.45); return [-0.5 / l, 0.75 / l, -0.45 / l]; })();
+let rxYaw = 0, rxPit = -0.38, rxTum = 0, rxT = 0, rxMom = 0, rxAuto = 0, rxAutoT = 0, rxBAvg = 0, rxLastK = 0, rxKicks = 0;
+let rxFireT = 9, rxFireS = 0, rxLastFire = -1e9, rxEF = 0, rxES = 0, rxPulse = 0, rxSeed = 1;
+const RX_P = [], RX_AIR = [];   // particles (0 dust, 1 spark, 2 ember) in model space; pressure rings leaving the woofers
+const rxMix = (a, b, t) => [0, 1, 2].map((i) => Math.round(a[i] + (b[i] - a[i]) * t));
+const rxScale = (c, s) => c.map((x) => Math.max(0, Math.min(255, Math.round(x * s))));
+const rxHash = (i) => { const x = Math.sin(i * 127.1 + rxSeed * 311.7) * 43758.5453; return x - Math.floor(x); };
+// a damped spring stepped in small slices, so the stiff woofer cones stay stable at any frame rate
+function rxSpring(o, x, v, target, k, c, dt) {
+  const n = Math.max(1, Math.ceil(dt / 0.006)), hs = dt / n;
+  for (let i = 0; i < n; i++) { o[v] += (-(o[x] - target) * k - o[v] * c) * hs; o[x] += o[v] * hs; }
+}
+// outline of a projected cone: the convex hull of its base ellipse and its tip
+function rxHull(pts) {
+  const s = pts.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]), cr = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lo = [], hi = [];
+  for (const p of s) { while (lo.length >= 2 && cr(lo[lo.length - 2], lo[lo.length - 1], p) <= 0) lo.pop(); lo.push(p); }
+  for (let i = s.length - 1; i >= 0; i--) { const p = s[i]; while (hi.length >= 2 && cr(hi[hi.length - 2], hi[hi.length - 1], p) <= 0) hi.pop(); hi.push(p); }
+  lo.pop(); hi.pop();
+  return lo.concat(hi);
+}
+function drawReactor(w, h, S, dt, active, hit, pal) {
+  const C = pal.c, HI = pal.hi, DP = pal.deep, TAU = Math.PI * 2, now = performance.now(), glass = CFG.rxStyle === 'glass';
+  rxT += dt;
+
+  // ---- kicks: the shared bass hit; with nothing playing (the customizer's demo beat) a detector of our own
+  const bs = (plv[0] + plv[1] + plv[2] + plv[3]) / 4;
+  rxBAvg += (bs - rxBAvg) * ease(0.04);
+  let kick = hit;
+  if (!kick && !active && bs > 0.3 && bs > rxBAvg * 1.3 && now - rxLastK > 200) kick = Math.min(1, bs);
+  if (kick) { rxLastK = now; rxKicks++; rxPulse = Math.max(rxPulse, kick); }
+  rxPulse *= decay(0.86);
+  rxEF += (energy - rxEF) * ease(0.08); rxES += (energy - rxES) * ease(0.004);   // short / long loudness, for drops
+
+  // ---- the core fires: the panels part and beams shoot out through the seams
+  let fire = 0;
+  const mode = CFG.rxBeams;
+  if (kick && mode !== 'off') {
+    if (mode === 'beat') fire = kick;
+    else if (mode === 'bar') { const k4 = beatSync(active) && BT.on ? Math.round(BT.b) : rxKicks; if (((k4 % 4) + 4) % 4 === 0) fire = Math.max(0.7, kick); }
+    else if ((rxEF > rxES * 1.3 + 0.04 && now - rxLastFire > 4000) || (kick > 0.92 && now - rxLastFire > 2500)) fire = 1;
+  }
+  if (fire) {
+    rxFireT = 0; rxFireS = Math.min(1, 0.45 + fire * 0.6); rxLastFire = now; rxSeed = Math.random() * 1000; rxMom += fire * 0.5;
+    if (CFG.rxAir) for (let i = 0; i < 14 && RX_P.length < 160; i++) {   // embers thrown out along the beams
+      const r = RX.rays[Math.floor(Math.random() * RX.rays.length)], s = 0.5 + Math.random();
+      RX_P.push({ p: r.d.map((x) => x * r.r), v: r.d.map((x) => x * s * 0.5 + (Math.random() - 0.5) * 0.2), life: 0.6 + Math.random() * 0.5, kind: 2 });
+    }
+  }
+  rxFireT += dt;
+  const env = rxFireT < 0.05 ? rxFireT / 0.05 : rxFireT < 0.3 ? 1 : Math.exp(-(rxFireT - 0.3) * 4.5);
+  const sep = Math.min(1.6, rxFireS * env * CFG.rxSep);
+
+  // ---- camera. ORBIT: turning, seen from a little above. FRONT: a woofer facing you, swaying (the sketch's view).
+  // TUMBLE: rolling end over end as it turns. AUTO cuts between them.
+  let cam = CFG.rxCam;
+  if (cam === 'auto') {
+    rxAutoT += dt;
+    if (rxAutoT > 16 || (fire && rxAutoT > 8)) { rxAutoT = 0; rxAuto = (rxAuto + 1) % 3; }
+    cam = ['orbit', 'front', 'tumble'][rxAuto];
+  }
+  if (kick) rxMom += kick * kick * 0.35;   // bass hits give it a shove, friction bleeds it off
+  rxMom = Math.min(5, rxMom * decay(0.985));
+  if (cam === 'front') {   // 5-fold symmetric: the nearest of the five woofer-forward angles, plus the sway
+    const P5 = TAU / 5, sway = Math.sin(rxT * 0.33) * 0.26, base = Math.round((rxYaw - sway) / P5) * P5;
+    rxYaw += (base + sway - rxYaw) * ease(0.06);
+  } else rxYaw += dt * (lmix(0.26 + energy * 0.5, 0.09) + rxMom * 0.45) * CFG.spin;
+  if (cam === 'tumble') rxTum += dt * lmix(0.3 + energy * 0.4, 0.1) * CFG.spin;
+  else rxTum += (Math.round(rxTum / TAU) * TAU - rxTum) * ease(0.03);
+  rxPit += ((RX_CAMS[cam] ?? RX_CAMS.orbit) + (cam === 'front' ? Math.sin(rxT * 0.21) * 0.06 : 0) - rxPit) * ease(0.035);
+  const ctm = Math.cos(rxTum), stm = Math.sin(rxTum), cyw = Math.cos(rxYaw), syw = Math.sin(rxYaw), cpt = Math.cos(rxPit), spt = Math.sin(rxPit);
+  const rot = (v) => {
+    const y0 = v[1] * ctm - v[2] * stm, z0 = v[1] * stm + v[2] * ctm;   // tumble (about X)
+    const X = v[0] * cyw - z0 * syw, Z0 = v[0] * syw + z0 * cyw;         // turn (about the vertical)
+    return [X, y0 * cpt - Z0 * spt, y0 * spt + Z0 * cpt];                // pitch
+  };
+  const U = S * 0.29 * (1 + rxPulse * 0.03), cxm = w / 2, cym = h / 2;
+  const prj = (r) => { const k = RX_PER / (RX_PER + r[2]); return [cxm + r[0] * U * k, cym - r[1] * U * k, r[2], k]; };
+  const P = (v) => prj(rot(v));
+
+  // ---- woofers and spikes
+  for (const f of RX.F) {
+    const lv = bandAvg(f.b[0], f.b[1]);
+    f.lv += (lv - f.lv) * ease(0.3);
+    if (f.spk) {
+      if (kick && CFG.rxBoom > 0) {
+        f.excV += kick * (f.base ? 2.6 : 2.0) * CFG.rxBoom;
+        if (CFG.rxAir) {
+          RX_AIR.push({ f, t: 0, s: kick });
+          for (let q = 0; q < 4 && RX_P.length < 160; q++) {   // a puff of dust off the cone
+            const a = Math.random() * TAU, dir = [0, 1, 2].map((d) => f.u[d] * Math.cos(a) + f.w[d] * Math.sin(a)), sp = (0.7 + Math.random() * 0.9) * (0.6 + kick);
+            RX_P.push({ p: [0, 1, 2].map((d) => f.c[d] + dir[d] * 0.2 + f.n[d] * 0.04), v: [0, 1, 2].map((d) => f.n[d] * sp + dir[d] * 0.4), life: 0.4 + Math.random() * 0.4, kind: 0 });
+          }
+        }
+      }
+      // the cone rings a little (pushes out, sucks back past rest, settles) and wobbles with its own low band
+      rxSpring(f, 'exc', 'excV', f.lv * 0.025 * CFG.rxBoom, 320, 14, dt);
+      f.exc = Math.max(-0.06, Math.min(0.16, f.exc));
+    } else {
+      // a spike jets out when its band jumps above its own recent level, then springs back into its hole
+      f.avg += (lv - f.avg) * ease(0.05);
+      const jump = lv - f.avg;
+      if (CFG.rxSpike > 0 && jump > 0.045 && lv > 0.14 && now - f.last > 85) {
+        f.last = now; f.extV += jump * 30 * CFG.rxSpike;
+        if (jump > 0.14 && CFG.rxAir) for (let q = 0; q < 2 && RX_P.length < 160; q++) {   // sparks flick off the tip
+          const L = 0.26 + f.ext * 0.6;
+          RX_P.push({ p: [0, 1, 2].map((d) => f.c[d] + f.n[d] * L), v: [0, 1, 2].map((d) => f.n[d] * (2 + Math.random() * 1.5) + (Math.random() - 0.5) * 1.6), life: 0.25 + Math.random() * 0.2, kind: 1 });
+        }
+      }
+      rxSpring(f, 'ext', 'extV', f.lv * 0.2 * CFG.rxSpike, 150, 15, dt);
+      if (f.ext < 0) { f.ext = 0; f.extV = Math.max(0, f.extV); }
+      if (f.ext > 1.1) { f.ext = 1.1; f.extV = Math.min(0, f.extV); }
+    }
+  }
+  for (let i = RX_AIR.length - 1; i >= 0; i--) { RX_AIR[i].t += dt; if (RX_AIR[i].t > 0.55) RX_AIR.splice(i, 1); }
+  if (RX_AIR.length > 30) RX_AIR.splice(0, RX_AIR.length - 30);
+  for (let i = RX_P.length - 1; i >= 0; i--) {
+    const q = RX_P[i]; q.life -= dt;
+    if (q.life <= 0) { RX_P.splice(i, 1); continue; }
+    const drag = Math.pow(q.kind === 2 ? 0.45 : 0.12, dt);
+    for (let d = 0; d < 3; d++) { q.v[d] *= drag; q.p[d] += q.v[d] * dt; }
+  }
+
+  // ---- geometry: each panel sits a little inside its face (the seams) and moves out along its normal when the core fires
+  const off = sep * 0.12, ins = 0.968 - sep * 0.03;
+  const faces = RX.F.map((f) => {
+    const c = f.c.map((x, d) => x + f.n[d] * off), nc = rot(f.n), cc = rot(c);
+    const vis = nc[0] * cc[0] + nc[1] * cc[1] + nc[2] * (cc[2] + RX_PER) < 0;
+    const pts = f.vi.map((i) => P(RX.V[i].map((x, d) => c[d] + (x - f.c[d]) * ins)));
+    const lit = Math.max(0, nc[0] * RX_LIGHT[0] + nc[1] * RX_LIGHT[1] + nc[2] * RX_LIGHT[2]);
+    return { f, c, nc, vis, pts, lit, z: cc[2] };
+  });
+  const byDepth = (list) => list.sort((a, b) => b.z - a.z);   // far first
+  const poly = (pts) => { ox.beginPath(); pts.forEach((p, i) => (i ? ox.lineTo(p[0], p[1]) : ox.moveTo(p[0], p[1]))); ox.closePath(); };
+  const disc = (fc, r, o, n = 28) => {
+    const f = fc.f, out = [];
+    for (let i = 0; i < n; i++) { const a = (i / n) * TAU, ca = Math.cos(a) * r, sa = Math.sin(a) * r; out.push(P([0, 1, 2].map((d) => fc.c[d] + f.n[d] * o + f.u[d] * ca + f.w[d] * sa))); }
+    return out;
+  };
+  const along = (fc, o) => P(fc.c.map((x, d) => x + fc.f.n[d] * o));
+  const box = (pts) => { let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; for (const p of pts) { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); } return [x0, y0, x1, y1]; };
+  const glow = Math.min(1.6, lmix(0.4 + energy * 0.55 + rxPulse * 0.35, 0.28) + sep * 1.4), LC = rxMix(C, HI, 0.45);
+
+  // ---- parts
+  const spike = (fc) => {
+    const f = fc.f, L = 0.26 + f.ext * 0.6, bc = along(fc, 0), tip = along(fc, L);
+    poly(rxHull([...disc(fc, 0.06, 0, 16), tip]));
+    const ax = tip[0] - bc[0], ay = tip[1] - bc[1], al = Math.hypot(ax, ay) || 1, px = -ay / al, py = ax / al, r = 0.06 * U * bc[3];
+    const g = ox.createLinearGradient(bc[0] - px * r, bc[1] - py * r, bc[0] + px * r, bc[1] + py * r);   // polished: dark edges, a bright streak
+    g.addColorStop(0, rgba(rxMix([64, 70, 78], DP, 0.25), 1)); g.addColorStop(0.38, rgba(rxMix([246, 249, 252], HI, 0.25), 1));
+    g.addColorStop(0.6, rgba([190, 198, 208], 1)); g.addColorStop(1, rgba([58, 64, 72], 1));
+    ox.fillStyle = g; ox.fill();
+    const heat = Math.min(1, Math.max(0, f.extV) / 7);   // white-hot while it shoots out
+    ox.save(); ox.globalCompositeOperation = 'lighter';
+    glowLine(ox, bc, tip, f.ext * 0.3 + heat * 0.6, HI, 9);
+    if (heat > 0.05) {
+      const tr = (5 + heat * 9) * (0.6 + tip[3] * 0.4), tg = ox.createRadialGradient(tip[0], tip[1], 0, tip[0], tip[1], tr);
+      tg.addColorStop(0, 'rgba(255,255,255,' + (heat * 0.9).toFixed(3) + ')'); tg.addColorStop(0.4, rgba(HI, heat * 0.5)); tg.addColorStop(1, rgba(C, 0));
+      ox.fillStyle = tg; ox.fillRect(tip[0] - tr, tip[1] - tr, tr * 2, tr * 2);
+    }
+    ox.restore();
+  };
+  const woofer = (fc) => {
+    const f = fc.f, e = f.exc, lit = fc.lit;
+    const fr = disc(fc, 0.25, 0.004), sur = disc(fc, 0.215, 0.006 + e * 0.45), cone = disc(fc, 0.18, e * 0.75), cap = disc(fc, 0.072, 0.012 + e, 20), cc = along(fc, 0.012 + e);
+    // chrome basket ring
+    const [x0, y0, x1, y1] = box(fr), l = 150 + lit * 95;
+    let g = ox.createLinearGradient(x0, y0, x1, y1);
+    g.addColorStop(0, rgba([l, l + 4, l + 9], 1)); g.addColorStop(0.5, rgba([88, 94, 102], 1)); g.addColorStop(1, rgba([l * 0.8, l * 0.8 + 4, l * 0.8 + 9], 1));
+    poly(fr); ox.fillStyle = g; ox.fill();
+    // rubber surround, then the cone and the dust cap, which ride out with the excursion
+    poly(sur); ox.fillStyle = rgba([17, 19, 23], 1); ox.fill(); ox.strokeStyle = 'rgba(255,255,255,0.12)'; ox.lineWidth = 1; ox.stroke();
+    const cr = 0.18 * U * cc[3];
+    g = ox.createRadialGradient(cc[0], cc[1], cr * 0.3, cc[0], cc[1], cr);
+    g.addColorStop(0, rgba([62, 67, 76], 1)); g.addColorStop(1, rgba([22, 25, 29], 1));
+    poly(cone); ox.fillStyle = g; ox.fill();
+    const capR = 0.072 * U * cc[3];
+    g = ox.createRadialGradient(cc[0] - capR * 0.35, cc[1] - capR * 0.4, 0, cc[0], cc[1], capR * 1.1);
+    g.addColorStop(0, rgba([214, 220, 228], 1)); g.addColorStop(0.45, rgba([84, 90, 99], 1)); g.addColorStop(1, rgba([26, 29, 34], 1));
+    poly(cap); ox.fillStyle = g; ox.fill();
+    ox.fillStyle = 'rgba(20,22,26,0.9)';   // three screws, toward the triangle's corners
+    for (const s of disc(fc, 0.234, 0.006, 3)) ox.fillRect(s[0] - 1, s[1] - 1, 2, 2);
+    // the basket's rim lights up with the bass
+    ox.save(); ox.globalCompositeOperation = 'lighter';
+    poly(fr); ox.strokeStyle = rgba(C, 0.1 + f.lv * 0.45 + Math.max(0, e) * 2); ox.lineWidth = 1.5; ox.stroke();
+    ox.restore();
+  };
+  const panel = (fc) => {
+    const p = fc.pts;
+    poly(p);
+    if (glass) {
+      const g = ox.createLinearGradient(p[0][0], p[0][1], (p[1][0] + p[2][0]) / 2, (p[1][1] + p[2][1]) / 2);
+      g.addColorStop(0, rgba(HI, 0.1 + fc.lit * 0.12)); g.addColorStop(1, rgba(C, 0.04 + fc.lit * 0.05));
+      ox.fillStyle = g; ox.fill();
+      ox.strokeStyle = rgba(HI, 0.35 + fc.lit * 0.4); ox.lineWidth = 1.2; ox.stroke();
+    } else {
+      // gunmetal with a hint of the theme colour, lit from the top left, brushed (lighter at the top of each panel)
+      const col = rxScale(rxMix(RX_GREY, C, 0.14), 0.4 + fc.lit * 0.62);
+      const g = ox.createLinearGradient(p[0][0], p[0][1], (p[1][0] + p[2][0]) / 2, (p[1][1] + p[2][1]) / 2);
+      g.addColorStop(0, rgba(rxScale(col, 1.16), 1)); g.addColorStop(1, rgba(rxScale(col, 0.78), 1));
+      ox.fillStyle = g; ox.fill();
+      ox.strokeStyle = 'rgba(255,255,255,' + (0.12 + fc.lit * 0.38).toFixed(3) + ')'; ox.lineWidth = 1.1; ox.stroke();   // chrome trim
+    }
+    if (fc.f.spk) woofer(fc);
+    else {   // the spike's hole, its rim lit by the spike's treble band
+      const hole = disc(fc, 0.085, 0.003, 22);
+      poly(hole); ox.fillStyle = 'rgba(8,10,13,0.96)'; ox.fill();
+      ox.save(); ox.globalCompositeOperation = 'lighter'; ox.strokeStyle = rgba(HI, 0.12 + fc.f.lv * 0.7); ox.lineWidth = 1.3; ox.stroke(); ox.restore();
+    }
+  };
+  const air = (front) => {
+    ox.save(); ox.globalCompositeOperation = 'lighter';
+    for (const a of RX_AIR) {
+      const fc = faces[RX.F.indexOf(a.f)];
+      if (fc.vis !== front) continue;
+      const al = Math.pow(Math.max(0, 1 - a.t / 0.55), 1.5) * a.s * (front ? 0.75 : 0.35), ring = disc(fc, 0.2 + a.t * 1.0, 0.03 + a.t * 0.8, 36);
+      poly(ring); ox.strokeStyle = rgba(C, al * 0.3); ox.lineWidth = 4; ox.stroke();
+      ox.strokeStyle = rgba(HI, al); ox.lineWidth = 1.3; ox.stroke();
+    }
+    ox.restore();
+  };
+  const beams = (front) => {
+    if (rxFireT > 1.6 || env < 0.01) return;
+    ox.save(); ox.globalCompositeOperation = 'lighter'; ox.lineWidth = 0.8;
+    RX.rays.forEach((r, i) => {
+      // every corner fires; about half the seams do, a different half each volley, so no two volleys look alike
+      if (r.k < 1 && rxHash(i + 99) > 0.5) return;
+      if ((rot(r.d)[2] < 0) !== front) return;
+      const k = (0.5 + rxHash(i) * 0.5) * r.k, r0 = r.r + off, len = Math.min(0.45 + rxHash(i + 7) * 0.6, rxFireT * (3 + rxHash(i + 50) * 2.5));
+      const al = env * rxFireS * k * (0.8 + 0.2 * Math.sin(rxT * 40 + i));
+      // bright where it leaves the seam, thinning out toward its end
+      const a = P(r.d.map((x) => x * r0)), m = P(r.d.map((x) => x * (r0 + len * 0.45))), b = P(r.d.map((x) => x * (r0 + len)));
+      glowLine(ox, a, m, al * 0.9, LC, 7); glowLine(ox, m, b, al * 0.4, LC, 6);
+      ox.strokeStyle = 'rgba(255,255,255,' + Math.min(1, al * 0.85).toFixed(3) + ')';
+      ox.beginPath(); ox.moveTo(a[0], a[1]); ox.lineTo(m[0], m[1]); ox.stroke();
+    });
+    ox.restore(); ox.lineWidth = 1;
+  };
+  const parts = (front) => {
+    ox.save(); ox.globalCompositeOperation = 'lighter'; ox.lineWidth = 1.2;
+    for (const q of RX_P) {
+      const r = rot(q.p);
+      if ((r[2] < 0) !== front) continue;
+      const s = prj(r), a = Math.min(1, q.life * 2.5);
+      if (q.kind === 1) { const e = P(q.p.map((x, d) => x - q.v[d] * 0.035)); ox.strokeStyle = 'rgba(255,255,255,' + (a * 0.9).toFixed(3) + ')'; ox.beginPath(); ox.moveTo(e[0], e[1]); ox.lineTo(s[0], s[1]); ox.stroke(); }
+      else { const z = q.kind === 2 ? 2 : 1.5; ox.fillStyle = q.kind === 2 ? rgba(LC, a) : rgba(HI, a * 0.55); ox.fillRect(s[0] - z / 2, s[1] - z / 2, z, z); }
+    }
+    ox.restore(); ox.lineWidth = 1;
+  };
+  const O = P([0, 0, 0]);
+  const halo = (r, a) => {
+    if (a <= 0.004) return;
+    const g = ox.createRadialGradient(O[0], O[1], 0, O[0], O[1], r);
+    g.addColorStop(0, rgba(LC, a)); g.addColorStop(1, rgba(C, 0));
+    ox.save(); ox.globalCompositeOperation = 'lighter'; ox.fillStyle = g; ox.fillRect(O[0] - r, O[1] - r, r * 2, r * 2); ox.restore();
+  };
+
+  // ---- behind the body: a soft aura, the far beams, dust and rings, the spikes pointing away
+  halo(U * 1.45 * O[3], 0.05 * glow);
+  beams(false); parts(false); air(false);
+  for (const fc of byDepth(faces.filter((x) => !x.vis && !x.f.spk))) spike(fc);
+  // ---- inside: the back walls lit by the core (this is what glows through the seams), then the core itself
+  for (const fc of faces) if (!fc.vis) {
+    poly(fc.f.vi.map((i) => P(RX.V[i].map((x) => x * 0.985))));
+    ox.fillStyle = glass ? rgba(DP, 0.35) : rgba(rxScale(DP, 0.6), 0.97); ox.fill();
+    ox.save(); ox.globalCompositeOperation = 'lighter'; ox.fillStyle = rgba(LC, Math.min(1, (glass ? 0.08 : 0.2) + glow * (glass ? 0.1 : 0.32))); ox.fill(); ox.restore();
+  }
+  {
+    const orr = U * O[3] * (0.62 + bs * 0.12 + sep * 0.25), g = ox.createRadialGradient(O[0], O[1], 0, O[0], O[1], orr);
+    g.addColorStop(0, 'rgba(255,255,255,' + Math.min(1, 0.5 + glow * 0.4).toFixed(3) + ')'); g.addColorStop(0.18, rgba(HI, 0.9 * Math.min(1, glow)));
+    g.addColorStop(0.5, rgba(C, 0.35 * glow)); g.addColorStop(1, rgba(C, 0));
+    ox.save(); ox.globalCompositeOperation = 'lighter'; ox.fillStyle = g; ox.fillRect(O[0] - orr, O[1] - orr, orr * 2, orr * 2); ox.restore();
+  }
+  // ---- the shell: front panels far to near, each with its woofer or spike hole, then the spikes on top
+  const front = byDepth(faces.filter((x) => x.vis));
+  for (const fc of front) panel(fc);
+  for (const fc of front) if (!fc.f.spk) spike(fc);
+  // ---- in front: rings and dust leaving the woofers, the near beams, and a flash of light when the core fires
+  air(true); beams(true); parts(true);
+  halo(U * 1.6 * O[3], env * rxFireS * 0.22);
+}
+
 /* ---------------- BPM + beat clock ----------------
    Tempo sources, best first: the seek bar's whole-track scan (exact BPM + where the beats fall, published in
    localStorage 'y2k:beat'; a BPM tag fixes its tempo), else a live estimate from the visualisation stream
@@ -3374,8 +3727,8 @@ const beatSync = (active) => CFG.beatSync && BT.lock && active;
 const CUST = [
   // SCREEN: what the big LCD shows
   ['CENTERPIECE', [
-    ['piece', 'Piece', 'seg', 'ORB: liquid goo in a wireframe cage. TOWERS: PS2-style glass data towers. HELIX: a Y2K DNA double helix. PYRAMID: four counter-rotating tiers. CUBE: balls of energy bouncing to the beat inside a glass cube. CYCLE: the next one on every new track',
-      [['orb', 'ORB'], ['towers', 'TOWER'], ['helix', 'HELIX'], ['pyramid', 'PYRAMID'], ['cube', 'CUBE'], ['cycle', 'CYCLE']]],
+    ['piece', 'Piece', 'seg', 'ORB: liquid goo in a wireframe cage. TOWERS: PS2-style glass data towers. HELIX: a Y2K DNA double helix. PYRAMID: four counter-rotating tiers. CUBE: balls of energy bouncing to the beat inside a glass cube. REACTOR: a speaker cabinet with woofers that boom on the bass, spikes that jet out on the treble and a core that fires beams through its seams. CYCLE: the next one on every new track',
+      [['orb', 'ORB'], ['towers', 'TOWER'], ['helix', 'HELIX'], ['pyramid', 'PYRAMID'], ['cube', 'CUBE'], ['reactor', 'REACTOR'], ['cycle', 'CYCLE']]],
     ['orb', 'Show centerpiece', 'toggle', 'The 3D piece in the middle of the screen'],
     ['coreColor', 'Colour', 'color', 'Colour of the centerpiece and its sparks. AUTO follows the theme colour'],
     ['spin', 'Speed', 'range', 'How fast the centerpiece turns (all pieces)', 0, 2.5, 0.1, 'x'],
@@ -3532,6 +3885,22 @@ const CUST = [
     ['cbRail', 'Rail', 'toggle', 'Show the circular rail they ride on, with a light running round it (off: the cubes float on their own)'],
   ], 'cube'],
 
+  ['WOOFERS & SPIKES', [
+    ['rxBoom', 'Woofer boom', 'range', 'How far the woofer cones punch out on each bass hit (0 = they stay still)', 0, 2, 0.1, 'x'],
+    ['rxSpike', 'Spike reach', 'range', 'How far the spikes jet out on treble peaks. Each spike follows its own slice of the treble, so they fire one by one (0 = they stay in)', 0, 2, 0.1, 'x'],
+    ['rxAir', 'Air & sparks', 'toggle', 'Pressure rings and puffs of dust blown out of the woofers on bass hits, sparks flicking off the spike tips, embers thrown out with the beams'],
+  ], 'reactor'],
+  ['CORE', [
+    ['rxBeams', 'Beams', 'seg', 'When the core fires thin beams of light out through the seams and pushes the panels apart. BARS: on the first beat of every bar. BEATS: on every bass hit. DROPS: only when the track kicks in after a quieter stretch (and on the very hardest hits). OFF: never',
+      [['bar', 'BARS'], ['beat', 'BEATS'], ['drop', 'DROPS'], ['off', 'OFF']]],
+    ['rxSep', 'Panel split', 'range', 'How far the panels part when the core fires (0 = they stay shut and the light squeezes out through the seams)', 0, 2, 0.1, 'x'],
+  ], 'reactor'],
+  ['SHELL & CAMERA', [
+    ['rxStyle', 'Shell', 'seg', 'METAL: gunmetal panels with chrome trim, the core only showing through the seams. GLASS: tinted glass panels with the core glowing inside', [['metal', 'METAL'], ['glass', 'GLASS']]],
+    ['rxCam', 'Camera', 'seg', 'ORBIT: turning slowly, seen from a little above. FRONT: a woofer facing you, swaying gently. TUMBLE: rolling end over end as it turns, so every side gets its turn. AUTO: cuts between the three',
+      [['orbit', 'ORBIT'], ['front', 'FRONT'], ['tumble', 'TUMBLE'], ['auto', 'AUTO']]],
+  ], 'reactor'],
+
   ['FINISH', [
     ['_mode', 'Chrome finish', 'look', 'LIGHT: brushed silver bezels (as designed). DARK: black chrome with light lettering. Applies to every panel: the top bar, the control pod, the info heads, the pills and buttons', [['light', 'LIGHT'], ['dark', 'DARK']]],
   ], 'theme'],
@@ -3544,7 +3913,7 @@ const CUST = [
 ];
 // general tabs first (what the screen shows, lyrics, seeking, the pod, the theme's look), then one per centerpiece
 const CUST_TABS = [['screen', 'SCREEN'], ['lyrics', 'LYRICS'], ['seek', 'SEEKING'], ['pod', 'POD'], ['theme', 'THEME'],
-  ['orb', 'ORB'], ['towers', 'TOWERS'], ['helix', 'HELIX'], ['pyramid', 'PYRAMID'], ['cube', 'CUBE']];
+  ['orb', 'ORB'], ['towers', 'TOWERS'], ['helix', 'HELIX'], ['pyramid', 'PYRAMID'], ['cube', 'CUBE'], ['reactor', 'REACTOR']];
 let custTab = safe(() => localStorage.getItem('deck:custTab'), null) || 'screen';
 if (!CUST_TABS.some(([id]) => id === custTab)) custTab = 'screen';
 const swatch = (id, p) => '<i data-val="' + id + '" title="' + esc(p.name) + '" style="background:radial-gradient(circle at 40% 35%,' + rgba(p.hi, 1) + ',' + rgba(p.c, 1) + ' 55%,' + rgba(p.deep, 1) + ')"></i>';

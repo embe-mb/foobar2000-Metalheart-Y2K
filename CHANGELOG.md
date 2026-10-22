@@ -1,5 +1,91 @@
 # Changelog
 
+## v1.3 — 2026-10-21
+
+> **Updating from v1.2:** the deck tells you about this update itself. Press **DOWNLOAD & INSTALL** on the notice at the top of the deck, or go to **CUSTOMIZE DECK › SCREEN › PERFORMANCE › Theme version**. It downloads the new version, closes foobar2000 when you press **CLOSE FOOBAR2000 & INSTALL**, and starts the installer, which restarts foobar2000 when it's done. Your deck settings, caches and library aren't touched. To install by hand instead, close foobar2000, extract `Metalheart-Y2K-theme.zip` and run **`Install Metalheart Y2K.cmd`**.
+
+### New
+
+**REACTOR, a new centerpiece**
+
+<img width="520" alt="REACTOR centerpiece" src="https://raw.githubusercontent.com/embe-mb/foobar2000-Metalheart-Y2K/main/docs/v1.3/reactor.gif" />
+
+- An icosahedral speaker cabinet with a core of light inside. It stands on one corner, so its 20 triangular panels form four rings of five around the top: a crown of spikes, a band of woofers, a band of spikes and a cap of woofers. Every spike sits opposite a woofer.
+- **Woofers (10):** the cones punch out on each bass hit and ring back past their resting point like a real cone. They also wobble with the low end, and their rims light up with the bass. The bottom five carry the sub-bass.
+- **Spikes (10):** each spike follows its own slice of the treble and jets out of its hole on that slice's peaks, so they fire one after another rather than all at once. They glow white-hot at the tip as they shoot out.
+- **Core:** the light inside shows through the seams between the panels and brightens with the music. When it fires, the panels part and thin beams shoot out through the corners and seams, with a different set of seams each time.
+- **Extras:** pressure rings and puffs of dust blown out of the woofers, sparks flicking off the spike tips, embers thrown out with the beams, and a flash of light when the core fires. Hard bass hits give it an extra spin.
+- **Settings (CUSTOMIZE DECK › REACTOR):**
+  - **Woofer boom** and **Spike reach:** how far each moves.
+  - **Air & sparks:** the extra particles on or off.
+  - **Beams:** when the core fires. **BARS** is the first beat of every bar, **BEATS** is every bass hit, **DROPS** is only when the track kicks in after a quieter stretch, and **OFF** never fires.
+  - **Panel split:** how far the panels part when it fires.
+  - **Shell:** **METAL** (gunmetal with chrome trim) or **GLASS** (the core glowing inside).
+  - **Camera:** **ORBIT**, **FRONT** (a woofer facing you), **TUMBLE** (rolling end over end) or **AUTO** (cuts between them).
+- REACTOR is also part of **CYCLE**.
+
+<img width="380" alt="REACTOR, metal shell" src="https://raw.githubusercontent.com/embe-mb/foobar2000-Metalheart-Y2K/main/docs/v1.3/reactor-fire.png" /> <img width="380" alt="REACTOR, glass shell" src="https://raw.githubusercontent.com/embe-mb/foobar2000-Metalheart-Y2K/main/docs/v1.3/reactor-glass.png" />
+
+**Media Library**
+
+<img width="880" alt="RECORD LABEL sort" src="https://raw.githubusercontent.com/embe-mb/foobar2000-Metalheart-Y2K/main/docs/v1.3/library-label.png" />
+
+- **Letter rail:** a strip down the left of ARTISTS, GENRES and ALBUMS that jumps through long lists. Click a letter or drag along the rail, and the current section's letter lights up. **#** at the top holds names starting with a symbol, a number or a non-Latin script. Accented names file under their letter, so Ásgeir goes under A.
+- **Album sorts** (ALBUMS tab):
+  - **ALL:** A to Z by title, ignoring a leading *The*, *A* or *An*.
+  - **YEAR:** a header for each year and a decade rail, with **EARLIEST FIRST** or **LATEST FIRST**.
+  - **RANDOM:** a shuffled order that stays the same until you press **SHUFFLE AGAIN**.
+  - **RECENTLY ADDED:** newest first, with a header for each month.
+  - **RECORD LABEL:** a header for each label with its number of releases, and a rail by label name. Labels spelt slightly differently ("Warp Records", "WARP RECORDS") count as one. Each label's releases are listed **BY RELEASE DATE** or **BY CATALOGUE NO.**, and numbers compare as numbers, so CAT-9 comes before CAT-10. Albums without a label tag are listed last.
+- **One label's releases:** click a label's header, click the label name on an album's page, or right-click an album and choose **More on [label]**. The cards show each release's catalogue number.
+
+  <img width="880" alt="One label's releases" src="https://raw.githubusercontent.com/embe-mb/foobar2000-Metalheart-Y2K/main/docs/v1.3/library-label-page.png" />
+
+- **Artist search:** click an artist's name on an album page, or in the **Library Selection** playlist, to see every album they're on. That includes albums where they're a track artist or a featured guest.
+- **GENRES** is grouped by letter, like ARTISTS.
+- **Remembers where you were:** the tab, sort, search and scroll position of every screen, through BACK and across restarts.
+- There's no longer a 4,000-album limit, and the edition line on duplicate albums is easier to read.
+
+**Dossier (Track Info)**
+
+<img width="400" alt="Dossier with VGMdb tags" src="https://raw.githubusercontent.com/embe-mb/foobar2000-Metalheart-Y2K/main/docs/v1.3/dossier-vgmdb.png" />
+
+- **Discogs and VGMdb tags.** Albums tagged with Mp3tag's Discogs or VGMdb sources, or with foo_discogs, now fill the Release section: catalogue number, label, media, country, barcode and date.
+  - MusicBrainz tags always win; the others only fill what's empty.
+  - Discogs formats are tidied up: "Vinyl (7", 45 RPM, Single)" shows as **7" Vinyl** plus a Single release type.
+  - Country names get their flag. Multi-country releases such as "UK & Europe" keep their wording.
+- **Tag source boxes** for Discogs (release, master, artist and label links), VGMdb (album link) and store or site links in the URL tags: Bandcamp, Beatport, Apple Music, Deezer, Spotify, Qobuz, TIDAL, AllMusic, SoundCloud, Juno, Traxsource and RYM.
+- VGMdb extras when tagged: **Release Notes**, **Event**, **Distributor**, **Manufacturer**, **Classification**, **Publish format** and **Involved** people.
+- **More rippers:** CUERipper, dBpoweramp, whipper and CUETools .accurip files (old and new formats) are read, alongside EAC and XLD. CUERipper logs used to be labelled as EAC.
+- When an album folder has more than one log, the main one is chosen in the order EAC, XLD, CUERipper, dBpoweramp, whipper. The others are listed under **ALSO IN THIS FOLDER**, each with its own **VIEW** button.
+
+  <img width="400" alt="Rip log with a second document" src="https://raw.githubusercontent.com/embe-mb/foobar2000-Metalheart-Y2K/main/docs/v1.3/dossier-rip.png" />
+
+- **Rip log window.** **VIEW RIP LOG** in the Dossier and the deck's **CD RIP** badge now open the log in a themed window of its own, like the Deck Customizer, instead of Notepad. It has:
+  - a tab for each document;
+  - summary chips for AccurateRip, errors, date, drive, offset, read mode and checksum;
+  - good lines in green and problem lines in amber;
+  - a **▸ TRACK n** button that jumps to the playing track;
+  - **OPEN FILE** if you still want your text editor.
+
+<img width="880" alt="Rip log window" src="https://raw.githubusercontent.com/embe-mb/foobar2000-Metalheart-Y2K/main/docs/v1.3/riplog-window.png" />
+
+### Changes and fixes
+
+- **Source medium for MP3s.** MusicBrainz Picard stores an MP3's media in a tag that foobar2000 names MEDIA TYPE rather than MEDIA. It's now read, so vinyl, cassette and CD-R rips in MP3 get the right badge and spinning icon. Every format of media tag is now tidied the same way, including Picard's own, Discogs' and hand-typed ones like "Vinyl 7", Single Sided".
+- **MD5 readout** now has its own line under NOW PLAYING, so long values no longer squeeze the top line. It also shows on medium-width decks now.
+
+  <img width="760" alt="Top line" src="https://raw.githubusercontent.com/embe-mb/foobar2000-Metalheart-Y2K/main/docs/v1.3/deck-topline.png" />
+
+- **Full screen:** the format line ("FLAC · 16-BIT · 44.1 KHZ · 1411 KBPS · STEREO") is no longer cut short when the track counter is long (e.g. "TRK 01/32 · DISC 2/2") or when Windows display scaling is set to 125% or 150%.
+- **Lyrics:** the highlighted lyric line on the deck no longer shaves off the edge of its last letter. In the Lyrics tab, the enlarged current line no longer runs off the sides of a narrow panel.
+- **Deck Customizer:** in a narrow window the tabs wrap onto a second row instead of running off the edge.
+- **Updater:** it now closes only the foobar2000 that started the update. This matters if you run more than one copy, and applies to updates after this one.
+
+<img width="960" alt="Full-screen deck with REACTOR" src="https://raw.githubusercontent.com/embe-mb/foobar2000-Metalheart-Y2K/main/docs/v1.3/deck-fullscreen.png" />
+
+*Screenshots use made-up demo albums and artists.*
+
 ## v1.2 — 2026-10-10
 
 > **Updating from v1.1:** v1.1 has no built-in updater, so this update is done by hand, once. Close foobar2000, extract `Metalheart-Y2K-theme.zip` and run **`Install Metalheart Y2K.cmd`** again. Your components are kept, your Columns UI settings are backed up first, and your deck settings and caches are not touched. The installer re-applies the main Metalheart layout, which brings in the new Track Info panel. From v1.2 on, the deck tells you about new versions itself.

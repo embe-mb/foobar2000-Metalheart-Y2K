@@ -12,8 +12,15 @@ Add-Type -AssemblyName System.Windows.Forms, System.Drawing, System.IO.Compressi
 Add-Type @"
 using System; using System.Runtime.InteropServices;
 public static class MhUpd {
-  [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindow(string cls, string title);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindowEx(IntPtr parent, IntPtr after, string cls, string title);
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
   [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, uint m, IntPtr w, IntPtr l);
+  // the top-level window of this class that belongs to process pid (another foobar2000 may be open too)
+  public static IntPtr FindForPid(string cls, uint pid) {
+    IntPtr h = IntPtr.Zero;
+    while ((h = FindWindowEx(IntPtr.Zero, h, cls, null)) != IntPtr.Zero) { uint p; GetWindowThreadProcessId(h, out p); if (p == pid) return h; }
+    return IntPtr.Zero;
+  }
 }
 "@
 
@@ -160,10 +167,12 @@ $bInstall.Add_Click({
     $form.Close(); return
   }
   Write-Log 'Closing foobar2000...'
-  # Columns UI's main window takes WM_CLOSE like File > Exit (CloseMainWindow can pick another of its windows)
-  $cui = [MhUpd]::FindWindow('{E7076D1C-A7BF-4f39-B771-BCBE88F2A2A8}', $null)
-  if ($cui -ne [IntPtr]::Zero) { [void][MhUpd]::PostMessage($cui, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero) }
-  else { foreach ($p in Get-Process foobar2000 -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $FbExe }) { [void]$p.CloseMainWindow() } }
+  # Columns UI's main window takes WM_CLOSE like File > Exit (CloseMainWindow can pick another of its windows).
+  # Only this foobar2000's window: another copy of foobar2000 that happens to be open is left alone.
+  foreach ($p in Get-Process foobar2000 -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $FbExe }) {
+    $cui = [MhUpd]::FindForPid('{E7076D1C-A7BF-4f39-B771-BCBE88F2A2A8}', [uint32]$p.Id)
+    if ($cui -ne [IntPtr]::Zero) { [void][MhUpd]::PostMessage($cui, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero) } else { [void]$p.CloseMainWindow() }
+  }
   $script:closing = Get-Date; $script:told = $false
   $timer.Start()
 })

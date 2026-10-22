@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>Metalheart Playlist</title>
-<link rel="stylesheet" href="common.css?v=15">
+<link rel="stylesheet" href="common.css?v=19">
 <style>
   body { display: flex; flex-direction: column; background: #121921; }
   .top { flex: none; padding: 3px 4px 0; display: flex; flex-direction: column; gap: 4px; }
@@ -66,6 +66,8 @@
   .grp .t1 { font: 700 13px/1.25 var(--ui); color: #eaf1f8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .grp .t1 b { color: var(--lime-1); font-weight: 700; letter-spacing: .02em; text-transform: uppercase; font-size: 11.5px; }
   .grp .t1 .sep { color: var(--blue-1); margin: 0 6px; }
+  .alink { cursor: pointer; }
+  .alink:hover { text-decoration: underline; }
   .grp .t2 { font: 11px/1.4 var(--ui); color: #8e9aa8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; gap: 8px; align-items: center; }
   .grp .t2 .flag { height: 10px; }
   .grp .yr { font: 700 15px/1 var(--seg); color: var(--lcd-fg); text-shadow: 0 0 6px var(--lime-glow); padding: 4px 6px 3px; border-radius: 4px; background: rgba(0,0,0,.35); border: 1px solid rgba(var(--c9cff2e),.2); }
@@ -98,7 +100,7 @@
 <div class="cols"><span></span><span>#</span><span>TITLE</span><span>ARTIST</span><span>YEAR</span><span>QUALITY</span><span>PLAYS</span><span>TIME</span></div>
 <div class="viewport" id="vp" tabindex="0"><div class="spacer" id="sp"></div></div>
 
-<script src="common.js?v=15"></script><script>Y2K.scopeAccent(document.body, 2); /* MULTI album colours: accent channel 2 */</script>
+<script src="common.js?v=19"></script><script>Y2K.scopeAccent(document.body, 2); /* MULTI album colours: accent channel 2 */</script>
 <script>
 'use strict';
 const { H, esc, safe } = Y2K;
@@ -226,7 +228,7 @@ function doRender() {
     if (row.g) {
       const g = row.g;
       h += '<div class="grp" data-g="' + r + '" style="top:' + top + 'px"><div class="cv" data-dir="' + esc(g.dir) + '" data-i="' + g.first + '"></div><div style="min-width:0">' +
-        '<div class="t1"><b>' + esc(g.aa || 'Unknown artist') + '</b><span class="sep">▸</span>' + esc(g.album || '(no album)') + (g.disc ? ' <span style="color:var(--blue-1)">· DISC ' + esc(g.disc) + '</span>' : '') + '</div>' +
+        '<div class="t1"><b' + (g.aa ? ' class="alink" data-artist="' + esc(g.aa) + '" title="Show this artist in the Media Library"' : '') + '>' + esc(g.aa || 'Unknown artist') + '</b><span class="sep">▸</span>' + esc(g.album || '(no album)') + (g.disc ? ' <span style="color:var(--blue-1)">· DISC ' + esc(g.disc) + '</span>' : '') + '</div>' +
         '<div class="t2">' + [g.label && esc(g.label), g.cc && (Y2K.flagHTML(g.cc) + ' ' + esc(g.cc.toUpperCase())), esc(g.q), g.n + ' track' + (g.n === 1 ? '' : 's'), dur(g.secs)].filter(Boolean).join('<span style="color:#3d4753">•</span>') + '</div></div>' +
         (g.year ? '<span class="yr">' + esc(g.year) + '</span>' : '<span></span>') + '</div>';
     } else {
@@ -236,7 +238,7 @@ function doRender() {
       h += '<div class="' + cls + '" data-i="' + i + '" style="top:' + top + 'px">' +
         '<span class="ind">' + (playingIdx.has(i) ? '<span class="eq"><i></i><i></i><i></i></span>' : '') + '</span>' +
         '<span class="n">' + esc(it.trk) + '</span><span>' + esc(it.title || it.path.split(/[\x5c/]/).pop()) + '</span>' +
-        '<span class="a">' + (showArtist ? esc(it.artist) : '') + '</span><span class="a">' + esc(it.year) + '</span>' +
+        '<span class="a">' + (showArtist ? '<span class="alink" data-artist="' + esc(it.artist) + '" title="Show this artist in the Media Library">' + esc(it.artist) + '</span>' : '') + '</span><span class="a">' + esc(it.year) + '</span>' +
         '<span class="q">' + esc(it.q) + '</span><span class="a">' + esc(it.plays && it.plays !== '0' ? it.plays : '') + '</span><span>' + esc(it.len) + '</span></div>';
     }
   }
@@ -303,6 +305,15 @@ $('sp').addEventListener('mousedown', (e) => {
     if (e.ctrlKey) g.members.forEach((i) => { if (!isSel(i)) toggle(i); }); else selectOnly(g.members);
     anchor = g.members[0]; setFocus(g.members[0], false);
   }
+});
+
+// A single click on an artist name searches for them in the Media Library panel (library.html
+// watches 'y2k:libSearch'). Row selection still happens as usual; this runs on mousedown because
+// the selection re-renders the rows, so a 'click' would never reach the name.
+$('sp').addEventListener('mousedown', (e) => {
+  const l = e.target.closest('.alink');
+  if (!l || e.button || e.detail > 1 || e.shiftKey || e.ctrlKey) return;
+  safe(() => localStorage.setItem('y2k:libSearch', JSON.stringify({ q: l.dataset.artist, t: Date.now() })));
 });
 
 $('vp').addEventListener('keydown', (e) => {

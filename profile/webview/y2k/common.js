@@ -46,6 +46,28 @@ const Y2K = (() => {
     mb_discid: ['musicbrainz_discid', 'musicbrainz disc id'],
     acoustid: ['acoustid_id', 'acoustid id'],
     artistcountry: ['artistcountry', 'artist country', 'musicbrainz artist country'],
+    /* Other tag sources (Mp3tag's Discogs source, the VGMdb scripts, foo_discogs, ...). Kept apart from the
+       MusicBrainz/Picard fields above so those always win; normalizeTags() fills the gaps from these. */
+    alt_catalog: ['catalog #', 'catalog', 'catalogid', 'catalog number', 'catalogno', 'discogs_catalog', 'vgmdb_catalog_number', 'labelno'],
+    alt_label: ['discogs_label', 'vgmdb_label', 'vgmdb_publisher'],
+    alt_media: ['mediatype', 'media type', 'discogs_mediatype', 'discogs_format', 'vgmdb_media_format'],
+    alt_country: ['discogs_country', 'country'],
+    alt_barcode: ['vgmdb_barcode', 'discogs_barcode'],
+    alt_date: ['discogs_released', 'vgmdb_release_date', 'releasedate', 'release date'],
+    notes: ['notes', 'vgmdb_notes', 'discogs_release_notes'],
+    event: ['event', 'vgmdb_event'],
+    pubformat: ['vgmdb_publish_format', 'publish format'],
+    classification: ['vgmdb_classification', 'classification'],
+    distributor: ['distributor', 'vgmdb_distributor'],
+    manufacturer: ['manufacturer', 'vgmdb_manufacturer'],
+    involved: ['involvedpeople', 'involved people', 'vgmdb_all_credits'],
+    discogs_release: ['discogs_release_id', 'discogs release id', 'discogs_releaseid', 'discogsid', 'discogs-id', 'discogs_id'],
+    discogs_master: ['discogs_master_release_id', 'discogs_master_id', 'discogs_master_release', 'discogs_masterid'],
+    discogs_artist: ['discogs_artist_id', 'discogs_artistid'],
+    discogs_labelid: ['discogs_label_id', 'discogs_labelid'],
+    vgmdb_url: ['vgmdb_url', 'vgmdb album url', 'vgmdb_album_url'],
+    vgmdb_id: ['vgmdb_album_id', 'vgmdb_id', 'vgmdbid'],
+    www: ['www', 'url', 'website', 'wwwaudiosource', 'www audio source', 'wwwaudiofile', 'www audio file', 'discogs_release_url', 'url_discogs_release_site'],
   };
   const TECH = {
     path: '[%path%]', dir: '[$directory_path(%path%)]', filename: '[%filename_ext%]', subsong: '[%subsong%]',
@@ -70,8 +92,110 @@ const Y2K = (() => {
     const o = {};
     KEYS.forEach((k, i) => { o[k] = (v[i] || '').trim(); });
     o.list = (k) => (o[k] ? o[k].split(/;\s*/).filter(Boolean) : []);
+    normalizeTags(o);
     return o;
   };
+
+  /* -------------------------------------------------------- other tag sources
+     MusicBrainz (Picard) fields always win. Where they are empty, values written by other taggers fill in:
+     Mp3tag's Discogs source (CATALOGNUMBER, PUBLISHER, MEDIATYPE "CD (Album, Reissue)", COUNTRY "UK & Europe",
+     WWW, DISCOGS_RELEASE_ID), the VGMdb scripts (CATALOG, LABEL, MEDIATYPE, NOTES, EVENT, WWW / VGMDB_*),
+     foo_discogs (DISCOGS_*). t.sources lists where the tags came from, MusicBrainz first. */
+  const FORMAT_SIZE = /\b(7|10|12)\s*("|''|”|″|inch\b)/i;
+  // a piece of a format list that starts a new format (rather than describing the one before it)
+  const FORMAT_WORD = /vinyl|\bcd|\bcdr\b|cassette|\bfile\b|digital|flexi|shellac|lathe|acetate|minidisc|\bdat\b|reel|8-track|\bdvd|blu-?ray|laser ?disc|\bvhs\b|\bsacd\b|\bhdcd\b|all media|^\s*(7|10|12)\s*("|'')\s*\S/i;
+  const RELEASE_TYPES = [['album', 'album'], ['lp', 'album'], ['mini-album', 'ep'], ['ep', 'ep'], ['single', 'single'], ['maxi-single', 'single'],
+    ['compilation', 'compilation'], ['mixtape', 'mixtape'], ['mixed', 'dj-mix'], ['soundtrack', 'soundtrack']];
+  /* "Vinyl (7", 45 RPM, Single), CD (Album)" -> [{ name, desc: [] }]. Also takes the loose forms found in real tags:
+     'Vinyl 7", Single Sided', 'File MP3', 'CDr (EP, Promo)', and Picard's own '12" Vinyl' / 'Digital Media'. */
+  function splitFormats(s) {
+    const parts = []; let depth = 0, cur = '', hard = true;   // hard: the piece followed a ';' (always a new format)
+    for (const ch of String(s || '').replace(/^﻿/, '') + '\0') {
+      if (ch === '(') depth++;
+      if (ch === ')') depth = Math.max(0, depth - 1);
+      if ((ch === ',' || ch === ';' || ch === '\0') && !depth) { if (cur.trim()) parts.push([cur.trim(), hard]); cur = ''; hard = ch === ';'; }
+      else cur += ch;
+    }
+    const out = [];
+    for (const [p, hard] of parts) {
+      const m = p.match(/^(.*?)\s*\((.*)\)/), name = m ? m[1] : p, desc = m ? m[2].split(/\s*,\s*/) : [];
+      if (!out.length || hard || FORMAT_WORD.test(name)) out.push({ name, desc });
+      else out[out.length - 1].desc.push(p);   // 'Single Sided', '45 RPM' ... belong to the format before
+    }
+    return out;
+  }
+  function mediaName(f) {
+    let n = f.name.trim().replace(/^\d+\s*x\s*/i, '').replace(/^\d+\s+(?=[a-z])/i, '');   // "2 x CD", "3 CD" (VGMdb) — not '12" Vinyl'
+    const size = (n.match(FORMAT_SIZE) || f.desc.join(',').match(FORMAT_SIZE) || [])[1];
+    if (/^all media$/i.test(n)) return '';
+    if (/vinyl/i.test(n) && !/flexi|lathe/i.test(n)) return size ? size + '" Vinyl' : 'Vinyl';
+    if (/^(file|digital)\b|^download/i.test(n)) return 'Digital Media';
+    if (/^cd-?r$/i.test(n)) return 'CD-R';
+    return n;
+  }
+  /** Any media tag value (Picard, Discogs, VGMdb, hand-typed) -> Picard-style names, e.g. '12" Vinyl; CD'. */
+  const mediaLabel = (s) => [...new Set(splitFormats(s).map(mediaName).filter(Boolean))].join('; ');
+  let nameToCC = null;
+  function countryCode(name) {
+    name = String(name || '').trim();
+    if (/^[A-Za-z]{2}$/.test(name)) return name.toUpperCase();
+    if (!nameToCC) {
+      nameToCC = new Map([['uk', 'GB'], ['us', 'US'], ['usa', 'US'], ['europe', 'XE'], ['worldwide', 'XW'], ['russia', 'RU'], ['south korea', 'KR'],
+        ['korea', 'KR'], ['taiwan', 'TW'], ['czech republic', 'CZ'], ['ussr', 'SU'], ['yugoslavia', 'YU'], ['german democratic republic (gdr)', 'XG'], ['east germany', 'XG']]);
+      const A = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+      if (regionNames) for (const a of A) for (const b of A) { const n = safe(() => regionNames.of(a + b), ''); if (n && n !== a + b && !nameToCC.has(n.toLowerCase())) nameToCC.set(n.toLowerCase(), a + b); }
+    }
+    for (const part of name.split(/\s*(?:&|,|\/|\band\b)\s*/i)) { const cc = nameToCC.get(part.toLowerCase()); if (cc) return cc; }
+    return '';
+  }
+  const hostOf = (u) => { const m = String(u || '').match(/^(?:https?:\/\/)?(?:www\.)?([^/\s?#]+)/i); return m ? m[1].toLowerCase() : ''; };
+  const WEB_SOURCES = [[/discogs\.com$/, 'discogs', 'Discogs'], [/vgmdb\.(net|info)$/, 'vgmdb', 'VGMdb'], [/bandcamp\.com$/, 'bandcamp', 'Bandcamp'],
+    [/beatport\.com$/, 'beatport', 'Beatport'], [/(music|itunes)\.apple\.com$/, 'apple', 'Apple Music'], [/deezer\.com$/, 'deezer', 'Deezer'],
+    [/spotify\.com$/, 'spotify', 'Spotify'], [/qobuz\.com$/, 'qobuz', 'Qobuz'], [/tidal\.com$/, 'tidal', 'TIDAL'], [/allmusic\.com$/, 'allmusic', 'AllMusic'],
+    [/soundcloud\.com$/, 'soundcloud', 'SoundCloud'], [/junodownload\.com$|juno\.co\.uk$/, 'juno', 'Juno'], [/traxsource\.com$/, 'traxsource', 'Traxsource'],
+    [/rateyourmusic\.com$/, 'rym', 'RateYourMusic'], [/musicbrainz\.org$/, 'mb', 'MusicBrainz']];
+  function normalizeTags(o) {
+    if (!o.catalognumber && o.alt_catalog) o.catalognumber = o.alt_catalog;
+    if (!o.label && o.alt_label) o.label = o.alt_label;
+    if (!o.barcode && o.alt_barcode) o.barcode = o.alt_barcode;
+    if (!o.date && o.alt_date) o.date = o.alt_date.replace(/[./]/g, '-');
+    /* MP3s: Picard's media goes in the ID3 TMED frame, which foobar2000 reads as MEDIA TYPE / MEDIATYPE, not MEDIA,
+       so for those files it arrives through alt_media. Every media value goes through the same clean-up. */
+    const rawMedia = (o.media || o.alt_media).replace(/^﻿/, '');
+    if (rawMedia) {
+      const fm = splitFormats(rawMedia);
+      o.media = mediaLabel(rawMedia) || rawMedia;
+      if (o.media !== rawMedia) o.mediaDetail = rawMedia;   // the dossier shows "CD (Album, Reissue)", "3 CD" in full
+      if (!o.releasetype) {
+        const ds = fm.flatMap((f) => f.desc.map((d) => d.trim().toLowerCase()));
+        const hit = RELEASE_TYPES.find(([d]) => ds.includes(d));
+        if (hit) o.releasetype = hit[1];
+      }
+    }
+    if (!o.releasecountry && o.alt_country) {
+      const cc = countryCode(o.alt_country);
+      if (cc) o.releasecountry = cc;
+      if (!cc || /&|,|\//.test(o.alt_country)) o.countryText = o.alt_country;   // "UK & Europe" keeps its words
+    }
+    // where the tags came from
+    const src = [], add = (id, name, url, ids) => { if (!src.some((s) => s.id === id)) src.push({ id, name, url, ids: ids || [] }); };
+    if (o.mb_release || o.mb_recording) add('mb', 'MusicBrainz', o.mb_release ? 'https://musicbrainz.org/release/' + firstOf(o.mb_release) : '');
+    const urls = String(o.www || '').split(/;\s*/).concat(o.vgmdb_url || []).filter(Boolean);
+    const dRel = firstOf(o.discogs_release).replace(/^\[?r/i, '').replace(/\]$/, ''), dMas = firstOf(o.discogs_master).replace(/^\[?m/i, '').replace(/\]$/, '');
+    const dUrl = urls.find((u) => /discogs\.com/i.test(u));
+    if (dRel || dMas || dUrl) add('discogs', 'Discogs', dRel ? 'https://www.discogs.com/release/' + dRel : dUrl || 'https://www.discogs.com/master/' + dMas, [
+      ['Release', dRel, dRel && 'https://www.discogs.com/release/' + dRel], ['Master', dMas, dMas && 'https://www.discogs.com/master/' + dMas],
+      ['Artist', firstOf(o.discogs_artist), o.discogs_artist && 'https://www.discogs.com/artist/' + firstOf(o.discogs_artist)],
+      ['Label', firstOf(o.discogs_labelid), o.discogs_labelid && 'https://www.discogs.com/label/' + firstOf(o.discogs_labelid)]]);
+    const vUrl = urls.find((u) => /vgmdb\.(net|info)/i.test(u)), vId = firstOf(o.vgmdb_id) || ((vUrl || '').match(/album\/(\d+)/) || [])[1] || '';
+    if (vUrl || vId) add('vgmdb', 'VGMdb', vUrl || 'https://vgmdb.net/album/' + vId, [['Album', vId, vId && 'https://vgmdb.net/album/' + vId]]);
+    for (const u of urls) {
+      const h = hostOf(u); if (!h) continue;
+      const w = WEB_SOURCES.find(([re]) => re.test(h));
+      add(w ? w[1] : 'web:' + h, w ? w[2] : h, /^https?:/i.test(u) ? u : 'https://' + u);
+    }
+    o.sources = src;
+  }
 
   /** Current track: now playing, else the focused item of the active playlist. */
   function getTrack() {
@@ -172,6 +296,10 @@ const Y2K = (() => {
 
   /* --------------------------------------------------------------- rip logs */
   const RIPPERS = [
+    // CUERipper writes an EAC-style log ("EAC extraction logfile from ..."): it must be recognised before EAC
+    [/^\s*CUERipper\s*v?([\d.]+)/im, 'CUERipper'],
+    [/\[CUETools log; Date: [^;\]]*; Version: ([^\]]+)\]/i, 'CUETools'],
+    [/^\[Verification date: [^\]]+\]()/m, 'CUETools'],   // older CUETools .accurip
     [/Exact Audio Copy V\s*([^\s]+(?: beta \d+)?)/i, 'EAC'],
     [/EAC extraction logfile/i, 'EAC'],
     [/X Lossless Decoder version\s*([^\s]+)/i, 'XLD'],
@@ -184,6 +312,9 @@ const Y2K = (() => {
     [/morituri version\s*([^\s]+)/i, 'morituri'],
   ];
   const UTF16_FIRST = { E: 'EAC', X: 'XLD', C: 'CUERipper', d: 'dBpoweramp' };
+  // which document is "the" verification: EAC first, then the others; the rest are listed as extra documentation
+  const RIP_RANK = ['EAC', 'XLD', 'CUERipper', 'dBpoweramp', 'whipper', 'Rubyripper', 'EZ CD Audio Converter', 'morituri', 'CUETools'];
+  const ripRank = (r) => { const i = RIP_RANK.indexOf(r.ripper); return i < 0 ? RIP_RANK.length : i; };
 
   function parseRipLog(text, trackNo) {
     const r = { ripper: '', version: '' };
@@ -193,6 +324,9 @@ const Y2K = (() => {
     }
     if (!r.ripper) return null;
     const g = (re) => { const m = text.match(re); return m ? m[1].trim() : ''; };
+    if (r.ripper === 'whipper') return parseWhipper(text, trackNo, r, g);
+    if (r.ripper === 'dBpoweramp') return parseDBpa(text, trackNo, r, g);
+    if (r.ripper === 'CUETools') return parseAccurip(text, trackNo, r, g);
     r.date = g(/(?:extraction logfile from|logfile from)\s*([^\r\n]+)/i) || g(/Log creation date:\s*([^\r\n]+)/i);
     r.drive = g(/Used drive\s*:\s*([^\r\n]+?)(?:\s+Adapter:.*)?$/im) || g(/^\s*Drive:\s*([^\r\n]+)/im);
     r.readMode = g(/Read mode\s*:\s*([^\r\n]+)/i) || g(/Ripper mode\s*:\s*([^\r\n]+)/i);
@@ -269,40 +403,255 @@ const Y2K = (() => {
     } else utf16Busy.delete(p); // try again next time this album comes up
   }
 
+  /* whipper (Linux): YAML-style report — "Log created by: whipper 0.10.0", "Ripping phase information:",
+     "Tracks:" / "  3:" / "    Copy CRC: ...", "Conclusive status report:" with "AccurateRip summary" + "Health status" */
+  function parseWhipper(text, trackNo, r, g) {
+    r.date = g(/Log creation date:\s*([^\r\n]+)/i);
+    r.drive = g(/^\s*Drive:\s*([^\r\n]+)/im);
+    r.readMode = g(/Extraction engine:\s*([^\r\n]+)/i);
+    r.offset = g(/Read offset correction:\s*([-+\d]+)/i);
+    r.gap = g(/Gap detection:\s*([^\r\n]+)/i);
+    r.ar = g(/AccurateRip summary:\s*([^\r\n]+)/i);
+    r.errors = /Health status:\s*No errors occurr?ed/i.test(text) ? 'No errors' : g(/Health status:\s*([^\r\n]+)/i);
+    r.checksum = /SHA-256 hash:\s*[0-9A-F]{64}/i.test(text) ? 'whipper SHA-256 hash present' : '';
+    r.ok = r.errors === 'No errors' || (/^All tracks accurately ripped/i.test(r.ar) && !r.errors);
+    const ti = text.search(/^Tracks:\s*$/m);
+    if (trackNo && ti >= 0) {
+      const n = parseInt(trackNo, 10);
+      const m = text.slice(ti).match(new RegExp('^ {2}0*' + n + ':\\s*\\r?\\n([\\s\\S]*?)(?=^ {2}\\d+:\\s*$|^\\S)', 'm'));
+      if (m) {
+        const s = m[1], tg = (x) => { const k = s.match(x); return k ? k[1].trim() : ''; };
+        const res = tg(/AccurateRip v2:\s*\r?\n\s*Result:\s*([^\r\n]+)/i) || tg(/Result:\s*([^\r\n]+)/i);
+        const conf = tg(/AccurateRip v2:[\s\S]*?Confidence:\s*(\d+)/i) || tg(/Confidence:\s*(\d+)/i);
+        const peak = tg(/Peak level:\s*([\d.]+)/i);
+        r.track = {
+          peak: peak ? (+peak <= 1 ? (+peak * 100).toFixed(1) : peak) + ' %' : '',
+          copyCRC: tg(/Copy CRC:\s*([0-9A-F]{8})/i), testCRC: tg(/Test CRC:\s*([0-9A-F]{8})/i),
+          ar: /exact match/i.test(res) ? 'Accurately ripped' + (conf ? ' (confidence ' + conf + ')' : '') : res,
+          status: tg(/^\s*Status:\s*([^\r\n]+)/im),
+        };
+      }
+    }
+    return r;
+  }
+  /* dBpoweramp: "dBpoweramp Release 17.3 Digital Audio Extraction Log from ...", settings lines
+     ("Ripping with drive '...', Drive offset: 667", "Using C2: No", "Encoder: FLAC ..."), then per track
+     "Track 1:  Ripped LBA 0 to 13893 (3:05) in 0:21. Filename: ..." / "AccurateRip: Accurate (confidence 31) [...]" / "CRC32: ..." */
+  function parseDBpa(text, trackNo, r, g) {
+    r.date = g(/Extraction Log from\s*([^\r\n]+)/i);
+    r.drive = g(/Ripping with drive\s*'([^']+)'/i).replace(/\s+/g, ' ');
+    r.offset = g(/Drive offset:\s*([-+\d]+)/i);
+    r.c2 = g(/Using C2:\s*([A-Za-z]+)/i);
+    r.format = g(/^\s*Encoder:\s*([^\r\n]+)/im);
+    const blocks = [...text.matchAll(/^\s*Track\s+(\d+):\s*Ripped([\s\S]*?)(?=^\s*Track\s+\d+:|^\s*-{2,}|(?![\s\S]))/gim)];
+    const checked = blocks.filter((b) => /AccurateRip:/i.test(b[2])).length;
+    const acc = blocks.filter((b) => /AccurateRip:\s*Accurate/i.test(b[2])).length;
+    const absent = blocks.filter((b) => /not (?:present|in database)|Unable to verify/i.test(b[2])).length;
+    const insecure = blocks.filter((b) => /\bInsecure\b/i.test(b[2])).length;
+    r.readMode = /^\s*Ultra::/im.test(text) ? 'Secure (Ultra)' : blocks.some((b) => /\bSecure\b/.test(b[2])) ? 'Secure' : '';
+    if (blocks.length) {
+      // old logs / vinyl-side rips have no AccurateRip lines at all: say so instead of "0 out of N"
+      r.ar = !checked ? '' : acc === blocks.length ? 'All tracks accurately ripped' : absent === checked ? 'None of the tracks are present in the AccurateRip database'
+        : acc + ' out of ' + blocks.length + ' tracks accurately ripped';
+      r.errors = insecure ? insecure + ' insecure track' + (insecure === 1 ? '' : 's') : 'No errors';
+    }
+    r.ok = blocks.length > 0 && !insecure;
+    if (trackNo) {
+      const b = blocks.find((x) => +x[1] === parseInt(trackNo, 10));
+      if (b) {
+        const s = b[2], tg = (x) => { const k = s.match(x); return k ? k[1].trim() : ''; };
+        r.track = { copyCRC: tg(/CRC32:\s*([0-9A-F]{8})/i), ar: tg(/AccurateRip:\s*([^\r\n[]+)/i), status: tg(/\b(Insecure|Secure(?: \(Warning\))?)\b/i) };
+      }
+    }
+    return r;
+  }
+  /* CUETools .accurip: an AccurateRip / CTDB check of the ripped files, not a rip log —
+     "[CUETools log; Date: ...; Version: 2.1.6]", " 01     [0d6a1e8a|8d5f3d1b] (05/12) Accurately ripped" */
+  function parseAccurip(text, trackNo, r, g) {
+    r.date = g(/\[CUETools log; Date: ([^;\]]+)/i) || g(/\[Verification date: ([^\]]+)\]/i);
+    r.readMode = 'Verification of the ripped files';
+    const rows = new Map();
+    for (const m of text.matchAll(/^\s*(\d+)\s+\[[0-9a-f]{8}(?:\|[0-9a-f]{8})?\]\s+\(([^)]*)\)\s+([^\r\n]+)/gim)) if (!rows.has(+m[1])) rows.set(+m[1], m);
+    const acc = [...rows.values()].filter((m) => /Accurately ripped/i.test(m[3])).length;
+    if (rows.size) r.ar = acc === rows.size ? 'All tracks accurately ripped' : acc + ' out of ' + rows.size + ' tracks accurately ripped';
+    const ctdb = g(/\[CTDB TOCID:[^\]]*\]\s*([^\r\n]+)/i);
+    if (ctdb) r.checksum = 'CTDB: ' + ctdb;
+    r.ok = rows.size > 0 && acc === rows.size;
+    const row = trackNo && rows.get(parseInt(trackNo, 10));
+    if (row) r.track = { ar: row[3].trim() + ' (' + row[2] + ')' };
+    return r;
+  }
+
+  /* All rip documentation in the album folder (.log, .accurip, and .txt files whose first lines name a ripper).
+     Returns the main one — EAC first, see RIP_RANK — with the rest in .others. */
   const logCache = new Map();
+  const DOC_FILE = /\.(log|txt|accurip)$/i, NOT_RIP = /audiochecker|spectro|lac\b|auCDtect|install|debug|lyric|readme|\bnfo\b/i;
+  const namesRipper = (text) => RIPPERS.some(([re]) => re.test(text.slice(0, 400)));
   function findRipLog(t) {
     if (!t || !t._local) return null;
     const ck = t.dir + '|' + t.tracknum;
     if (logCache.has(ck)) return logCache.get(ck);
-    const logs = listDir(t._dirFwd).filter((f) => !f.isDirectory && /\.log$/i.test(f.name));
-    let out = null;
-    // prefer logs that look like rip logs: name contains album/artist, then biggest
-    logs.sort((a, b) => b.size - a.size);
-    for (const f of logs) {
-      if (/audiochecker|spectro|lac\b|auCDtect|install|debug/i.test(f.name)) continue;
-      const p = t._dirFwd + '/' + f.name;
+    const files = listDir(t._dirFwd).filter((f) => !f.isDirectory && DOC_FILE.test(f.name) && !NOT_RIP.test(f.name) && f.size < 2e6);
+    files.sort((a, b) => b.size - a.size);
+    const docs = [];
+    for (const f of files) {
+      const p = t._dirFwd + '/' + f.name, isTxt = /\.txt$/i.test(f.name);
       const txt = readText(p);
       const looksUtf16 = !txt || txt.length < Math.min(64, f.size / 4) || txt.charCodeAt(0) === 0xFFFD || txt.startsWith('ÿþ');
-      if (!looksUtf16) {
-        const parsed = parseRipLog(txt, t.tracknum);
-        if (parsed) { out = Object.assign(parsed, { file: f.name, path: p, encoding: 'UTF-8' }); break; }
-      } else if (utf16Text.has(p)) {
-        const parsed = parseRipLog(utf16Text.get(p), t.tracknum);
-        if (parsed) { out = Object.assign(parsed, { file: f.name, path: p, encoding: 'UTF-16' }); break; }
+      let d = null;
+      if (!looksUtf16 || utf16Text.has(p)) {
+        const body = looksUtf16 ? utf16Text.get(p) : txt;
+        if (!isTxt || namesRipper(body)) d = parseRipLog(body, t.tracknum);
+        if (d) d.encoding = looksUtf16 ? 'UTF-16' : 'UTF-8';
       } else {
         // not decoded yet: identify the ripper from the first character (read as ANSI) and decode in the background
         const ansi = safe(() => H.readAllText(p, 1252), '');
         const first = ansi.replace(/^ÿþ|^﻿/, '').charAt(0);
         if (UTF16_FIRST[first]) {
-          out = { ripper: UTF16_FIRST[first], version: '', file: f.name, path: p, encoding: 'UTF-16', utf16: true };
+          // a .txt only counts once its decoded header names a ripper (it could be any UTF-16 text file)
+          if (!isTxt) d = { ripper: UTF16_FIRST[first], version: '', encoding: 'UTF-16', utf16: true };
           loadUtf16Log(p, t.dir);
-          break;
         }
       }
+      if (d) docs.push(Object.assign(d, { file: f.name, path: p, dirKey: t.dir, track: d.track || null }));
     }
+    docs.sort((a, b) => ripRank(a) - ripRank(b));   // stable: biggest file first within a ripper
+    const out = docs[0] || null;
+    if (out) out.others = docs.slice(1);
     if (logCache.size > 40) logCache.clear();
     logCache.set(ck, out);
     return out;
+  }
+  /** Full text of a rip document (UTF-16 logs are decoded through logcache first). */
+  async function ripLogText(doc) {
+    if (!doc.utf16 && doc.encoding !== 'UTF-16') return readText(doc.path);
+    if (!utf16Text.has(doc.path)) {
+      loadUtf16Log(doc.path, doc.dirKey || '');
+      for (let i = 0; i < 60 && !utf16Text.has(doc.path) && utf16Busy.has(doc.path); i++) await new Promise((r) => setTimeout(r, 150));
+    }
+    return utf16Text.get(doc.path) || '';
+  }
+
+  /* ------------------------------------------------------------ rip log window
+     Opened from the deck's CD RIP badge or the dossier tab, styled like the deck customizer.
+     One tab per document; the main one (EAC first) opens first. */
+  const LOG_OK = /accurately ripped|exact match|No errors occurr?ed|Copy OK|AccurateRip:\s*Accurate\b|Health status:\s*No errors/i;
+  const LOG_BAD = /suspicious|insecure|inaccurate|cannot be verified|not present in|could not be verified|no match|There were errors|errors occurr?ed|Read error|Skip error|Timing problem|Missing samples|mismatch|Some tracks/i;
+  const LOG_HEAD = /^\s*(Track\s+\d+:?|Tracks:|TOC:|Range status and errors|AccurateRip summary|Conclusive status report:?|Ripping phase information:|CD metadata:|Extraction Log|Drive & Settings|-{4,}|={4,}.*)\s*$/i;
+  function trackLineRe(ripper, n) {
+    if (ripper === 'dBpoweramp') return new RegExp('^\\s*Track\\s+0*' + n + ':', 'i');
+    if (ripper === 'whipper') return new RegExp('^ {2}0*' + n + ':\\s*$');
+    if (ripper === 'CUETools') return new RegExp('^\\s*0*' + n + '\\s+\\[', 'i');
+    return new RegExp('^\\s*Track\\s+0*' + n + '\\s*$', 'i');
+  }
+  /* Like CUSTOMIZE DECK, it opens in a window of its own (the panel's stylesheets and live theme colours copied
+     across); if no window can be opened it shows over the panel instead. */
+  let logWin = null, logPop = null, logPopDoc = null, logStyles = [], logPoll = 0, logSyncOn = false;
+  function syncLogStyles() {
+    if (!logPop || logPop.closed) return;
+    for (const [src, dst] of logStyles) if (src.tagName === 'STYLE' && dst.textContent !== src.textContent) dst.textContent = src.textContent;
+  }
+  function closeRipLog() {
+    if (logWin) { logWin.remove(); logWin = null; document.removeEventListener('keydown', logKey, true); }
+    const w = logPop;
+    logPop = null; logPopDoc = null; logStyles = []; clearInterval(logPoll);
+    if (w && !w.closed) safe(() => w.close());
+  }
+  function logKey(e) { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeRipLog(); } }
+  // the log's own window, reused while open; null when the browser won't open one
+  function popLog() {
+    if (logPop && !logPop.closed && logPopDoc && safe(() => logPop.document === logPopDoc, false)) return logPopDoc;
+    const W = Math.min(900, screen.availWidth - 40), Hh = Math.min(680, screen.availHeight - 60);
+    const L = Math.max(screen.availLeft || 0, Math.round(window.screenX + (window.outerWidth - W) / 2)), T = Math.max(screen.availTop || 0, Math.round(window.screenY + 40));
+    const w = safe(() => window.open('', 'metalheart-riplog', 'popup,width=' + W + ',height=' + Hh + ',left=' + L + ',top=' + T), null);
+    if (!w || !safe(() => w.document, null)) return null;
+    const d = w.document;
+    d.open();
+    d.write('<!doctype html><html><head><meta charset="utf-8"><base href="' + esc(document.baseURI) + '"><title>Rip Log — Metalheart</title></head><body></body></html>');
+    d.close();
+    logStyles = [...document.querySelectorAll('link[rel=stylesheet], style')].map((n) => [n, d.head.appendChild(d.importNode(n, true))]);
+    const st = d.createElement('style');
+    st.textContent = 'html, body { margin: 0; height: 100%; overflow: hidden; background: #121820; }'
+      + ' .logv.popped { position: static; height: 100%; padding: 0; display: block; background: none; }'
+      + ' .logv.popped .logv-win { width: 100%; height: 100%; border-radius: 0; border: none; box-shadow: none; }';
+    d.head.appendChild(st);
+    if (!logSyncOn) { logSyncOn = true; onSchemeChange(syncLogStyles); }
+    /* keep it a log window, not a browser (same rules as the customizer): leaving the page closes it, and browser
+       shortcuts, back/forward mouse buttons, the right-click menu and drag-and-drop are switched off */
+    w.addEventListener('pagehide', () => { if (logPop === w) { logWin = null; closeRipLog(); } setTimeout(() => safe(() => w.close()), 0); });
+    w.addEventListener('keydown', (e) => {
+      const k = (e.key || '').toLowerCase();
+      if (k === 'escape') { e.preventDefault(); closeRipLog(); return; }
+      const edit = ['c', 'a'].includes(k) && !e.altKey;
+      if (((e.ctrlKey || e.metaKey) && !edit) || (e.altKey && k !== 'alt') || /^f\d+$/.test(k) || k.startsWith('browser')) e.preventDefault();
+    }, true);
+    for (const ev of ['mousedown', 'mouseup', 'auxclick']) w.addEventListener(ev, (e) => { if (e.button === 3 || e.button === 4) e.preventDefault(); }, true);
+    w.addEventListener('contextmenu', (e) => e.preventDefault(), true);
+    w.addEventListener('dragover', (e) => e.preventDefault(), true);
+    w.addEventListener('drop', (e) => e.preventDefault(), true);
+    logPop = w; logPopDoc = d;
+    window.addEventListener('pagehide', closeRipLog, { once: true });   // the panel reloads: its window goes too
+    // closed with its X, or showing some other page: tidy up; also keeps the look colours in step
+    logPoll = setInterval(() => {
+      if (!logPop) return clearInterval(logPoll);
+      if (logPop.closed || !safe(() => logPop.document === logPopDoc, false)) { logWin = null; closeRipLog(); return; }
+      syncLogStyles();
+    }, 250);
+    return d;
+  }
+  function showRipLog(rip, trackNo, start = 0) {
+    if (!rip) { closeRipLog(); return; }
+    if (logWin) { logWin.remove(); logWin = null; document.removeEventListener('keydown', logKey, true); }
+    const docs = [rip, ...(rip.others || [])];
+    const pd = popLog(), host = pd || document;
+    logWin = host.createElement('div');
+    logWin.className = 'logv' + (pd ? ' popped' : '');
+    logWin.innerHTML = '<div class="logv-win"><div class="logv-head"><b>RIP LOG</b><span class="logv-sub"></span><span class="logv-sp"></span>' +
+      '<span class="logv-btn" data-act="track" hidden></span><span class="logv-btn" data-act="file" title="Open this file in your text editor">OPEN FILE</span>' +
+      '<span class="logv-btn lime" data-act="close" title="Close (Esc)">DONE</span></div>' +
+      (docs.length > 1 ? '<div class="logv-tabs">' + docs.map((d, i) => '<i data-i="' + i + '" title="' + esc(d.file) + '">' + esc(d.ripper + (i === 0 ? ' · MAIN' : '')) + '</i>').join('') + '</div>' : '') +
+      '<div class="logv-sum"></div><div class="logv-text"><div class="logv-wait">READING LOG…</div></div></div>';
+    host.body.appendChild(logWin);
+    if (pd) { pd.title = 'Rip Log — ' + (rip.file || 'Metalheart'); safe(() => logPop.focus()); }
+    else {
+      document.addEventListener('keydown', logKey, true);
+      logWin.addEventListener('mousedown', (e) => { if (e.target === logWin) closeRipLog(); });
+    }
+    let cur = 0, seq = 0;
+    const $l = (s) => logWin.querySelector(s);
+    async function show(i) {
+      cur = i; const d = docs[i], my = ++seq;
+      logWin.querySelectorAll('.logv-tabs i').forEach((el) => el.classList.toggle('on', +el.dataset.i === i));
+      $l('.logv-sub').textContent = [d.ripper + (d.version ? ' ' + d.version : ''), d.file].join(' · ');
+      const chip = (label, v, cls) => (v ? '<span class="logv-chip ' + (cls || '') + '"><em>' + label + '</em>' + esc(v) + '</span>' : '');
+      const arOk = d.ar && /^All tracks accurately ripped/i.test(d.ar);
+      $l('.logv-sum').innerHTML = chip('ACCURATERIP', d.ar, d.ar ? (arOk ? 'ok' : 'bad') : '') + chip('ERRORS', d.errors, d.errors ? (d.errors === 'No errors' ? 'ok' : 'bad') : '') +
+        chip('RIPPED', d.date) + chip('DRIVE', d.drive) + chip('OFFSET', d.offset) + chip('MODE', d.readMode) + chip('CHECKSUM', d.checksum);
+      const box = $l('.logv-text');
+      box.innerHTML = '<div class="logv-wait">READING LOG…</div>';
+      const text = await ripLogText(d);
+      if (!logWin || my !== seq) return;
+      if (!text) { box.innerHTML = '<div class="logv-wait">COULD NOT READ THIS FILE<br><span>Use OPEN FILE to view it in your text editor</span></div>'; return; }
+      const lines = text.replace(/^﻿/, '').split(/\r?\n/);
+      const n = parseInt(trackNo, 10), re = n ? trackLineRe(d.ripper, n) : null;
+      const from = d.ripper === 'whipper' ? Math.max(0, lines.findIndex((l) => /^Tracks:\s*$/.test(l))) : 0;
+      const hit = re ? lines.findIndex((l, k) => k >= from && re.test(l)) : -1;
+      box.innerHTML = lines.map((l, k) => {
+        const c = LOG_HEAD.test(l) ? 'hd' : LOG_BAD.test(l) && !/Re-?Rip Insecure Sectors|No errors/i.test(l) ? 'bad' : LOG_OK.test(l) ? 'ok' : '';
+        return '<div' + (c ? ' class="' + c + '"' : '') + (k === hit ? ' id="logvTrack"' : '') + '>' + (esc(l) || ' ') + '</div>';
+      }).join('');
+      box.scrollTop = 0;
+      const tb = $l('[data-act="track"]');
+      tb.hidden = hit < 0; tb.textContent = '▸ TRACK ' + n; tb.title = 'Jump to this track in the log';
+    }
+    logWin.querySelectorAll('.logv-tabs i').forEach((el) => { el.onclick = () => show(+el.dataset.i); });
+    logWin.querySelector('.logv-head').addEventListener('click', (e) => {
+      const act = e.target.dataset && e.target.dataset.act;
+      if (act === 'close') closeRipLog();
+      else if (act === 'file') openFile(docs[cur].path);
+      else if (act === 'track') { const el = $l('#logvTrack'), box = $l('.logv-text'); if (el) box.scrollTop = el.offsetTop - 6; }
+    });
+    show(Math.min(Math.max(0, start | 0), docs.length - 1));
   }
 
   /* --------------------------------------------------------------- flags */
@@ -432,7 +781,7 @@ const Y2K = (() => {
   /* --------------------------------------------------------------- theme updates
      VERSION is this copy of the theme: bump it for every GitHub release and tag the release v<VERSION>.
      checkUpdate asks GitHub for the latest release (cached an hour unless forced). */
-  const VERSION = '1.2';
+  const VERSION = '1.3';
   const REPO = 'embe-mb/foobar2000-Metalheart-Y2K';
   const verNum = (s) => String(s || '').replace(/^v/i, '').split('.').map((n) => parseInt(n, 10) || 0);
   function isNewer(a, b) {
@@ -928,7 +1277,7 @@ const Y2K = (() => {
     PALETTES, tint, applyScheme, setScheme, fadePriority, setSchemeMode, setAlbumPalette, scopeAccent, specFor, rgb2hsl, onSchemeChange,
     get scheme() { return scheme; }, get schemeMode() { return mode; },
     LOOK_CHROME, LOOK_CAPS, setLook, applyLook, get look() { return look; },
-    thumb, embeddedArt, isArtPl, findDirArtFile, idb, onRipLog, addPaths, playPaths, loadPaths, playlistIndexByName, toFwd, SEP,
+    thumb, embeddedArt, isArtPl, findDirArtFile, idb, onRipLog, showRipLog, closeRipLog, ripLogText, countryCode, mediaLabel, addPaths, playPaths, loadPaths, playlistIndexByName, toFwd, SEP,
     H, BS, esc, log, safe, getTrack, listDir, readText, readImage, resolveArt, findRipLog, parseRipLog,
     countryName, flagHTML, flagFile, barcodeSVG, mb, getJSON, store, artistCountry, openUrl, openFile, runCommand, VERSION, checkUpdate,
     fmtTime, qualityOf, firstOf, clean, debounce, onTrackContextChange, trackKey, profileDir, exePath, DAY, parseLRC, lyricWords,

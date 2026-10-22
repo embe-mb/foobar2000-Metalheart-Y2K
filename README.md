@@ -95,6 +95,7 @@ This theme is primarily catered to those who use MusicBrainz Picard and scrobble
   - **HELIX:** a Y2K DNA double helix with a scanner ring;
   - **PYRAMID:** counter-rotating glass tiers that shatter on drops;
   - **CUBE:** a glass cube with energy balls bouncing off its walls on the beat, tesla arcs and orbiting mini-cubes;
+  - **REACTOR:** an icosahedral speaker cabinet whose woofers boom on the bass, whose spikes jet out on the treble, and whose glowing core fires beams through the seams;
   - **CYCLE:** a different one on every new track.
 - **CUSTOMIZE DECK.** It opens in its own window and changes apply live:
   - every centerpiece has its own tab of settings;
@@ -102,8 +103,9 @@ This theme is primarily catered to those who use MusicBrainz Picard and scrobble
   - **Theme colour:** lime, aqua, ice blue, magenta, amber or ember red, cross-fading over the whole skin. The **ALBUM ART** option takes its colours from the cover of what's playing, in MONO (one colour) or MULTI (up to three);
   - **THEME:** light or dark chrome, the chrome's tint, and the colour of the headers and tabs.
 - **Seek bar.** It is built in, shows the track's whole waveform (Apple Lossless included), and follows the theme colour. The styles are bars, wave and LED.
+- **Media Library.** Browse by artist, album, genre or year, with a letter rail to jump through long lists. Albums sort A–Z, by year, at random, by date added or by record label. Click an artist or a label to see everything by them, and it remembers where you were.
 - **Track Info panel**, with a hi-fi push-button tab bar:
-  - **Dossier:** release, credits, the full rip-log report (UTF-16 EAC logs included) and MusicBrainz details.
+  - **Dossier:** release and credits from MusicBrainz tags (Discogs and VGMdb tags fill the gaps), the rip-log report for EAC, XLD, CUERipper, dBpoweramp, whipper and CUETools in its own log window, and MusicBrainz details.
   - **Lyrics:** synced lyrics with word-by-word highlighting. OpenLyrics still does the searching, from a 2-pixel panel tucked under the tabs, because it only works while one of its own panels is on screen.
   - **Artist Bio:** biography and discography; click an album to play it from your library or Navidrome.
   - **Tags**, and **MilkDrop** (about 900 public domain presets) in its own window.
