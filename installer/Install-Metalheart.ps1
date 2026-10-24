@@ -21,9 +21,9 @@ $Components = @(
   @{ Name = 'foo_uie_albumlist'; Title = 'Album List panel';                     Page = 'https://www.foobar2000.org/components/view/foo_uie_albumlist'; Required = $true },
   @{ Name = 'foo_openlyrics';    Title = 'OpenLyrics (lyrics panel)';            Page = 'https://www.foobar2000.org/components/view/foo_openlyrics';    Required = $true },
   @{ Name = 'foo_vis_milk2';     Title = 'MilkDrop 2 visualiser';                Page = 'https://www.foobar2000.org/components/view/foo_vis_milk2';     Required = $true },
-  @{ Name = 'foo_listenbrainz2'; Title = 'ListenBrainz scrobbler (optional)';    GitHub = 'phw/foo_listenbrainz2';                                       Required = $false },
-  @{ Name = 'foo_navidrome';     Title = 'Navidrome / Subsonic browser (optional)'; Page = 'https://www.foobar2000.org/components/view/foo_navidrome';  Required = $false }
+  @{ Name = 'foo_listenbrainz2'; Title = 'ListenBrainz scrobbler (optional)';    GitHub = 'phw/foo_listenbrainz2';                                       Required = $false }
 )
+# Navidrome needs no component: the Media Library and Artist Bio panels talk to the server themselves.
 
 Add-Type @"
 using System; using System.Text; using System.Runtime.InteropServices;

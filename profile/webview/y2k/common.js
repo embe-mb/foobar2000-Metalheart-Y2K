@@ -823,7 +823,7 @@ const Y2K = (() => {
   /* --------------------------------------------------------------- theme updates
      VERSION is this copy of the theme: bump it for every GitHub release and tag the release v<VERSION>.
      checkUpdate asks GitHub for the latest release (cached an hour unless forced). */
-  const VERSION = '1.4.1';
+  const VERSION = '1.5';
   const REPO = 'embe-mb/foobar2000-Metalheart-Y2K';
   const verNum = (s) => String(s || '').replace(/^v/i, '').split('.').map((n) => parseInt(n, 10) || 0);
   function isNewer(a, b) {
@@ -883,8 +883,7 @@ const Y2K = (() => {
      One server for every panel (Media Library, Artist Bio): its address, the user and a salted token (Subsonic token
      auth, md5(password + salt); the password itself is never kept) in localStorage 'y2k:navidrome'.
      Tracks go into playlists as the server's own stream URLs (format=raw = the original file, so seeking works).
-     foobar2000 plays and tags those by itself; foo_navidrome's navidrome:// paths would only play once that
-     component has the same server in its own preferences. */
+     foobar2000 plays and tags those by itself, so no Navidrome component is needed. */
   const ND_KEY = 'y2k:navidrome';
   const ndCfg = () => safe(() => JSON.parse(localStorage.getItem(ND_KEY)), null) || null;
   const ndAuth = (c) => 'u=' + encodeURIComponent(c.user) + '&t=' + c.token + '&s=' + c.salt + '&v=1.16.1&c=metalheart';
@@ -906,6 +905,28 @@ const Y2K = (() => {
     return ((r.album || {}).song || []).slice().sort((x, y) => (x.discNumber || 1) - (y.discNumber || 1) || (x.track || 0) - (y.track || 0));
   }
   const ndPaths = async (albumId) => (await ndSongs(albumId)).map((s) => ndStream(s.id));
+  /** The user's playlists on the server (their own and public ones), by name. */
+  async function ndPlaylists() {
+    const r = await nd('getPlaylists', '', undefined, 15000);
+    return ((r.playlists || {}).playlist || []).slice().sort((x, y) => String(x.name).localeCompare(String(y.name), undefined, { numeric: true, sensitivity: 'base' }));
+  }
+  /** The server's song id in one of this server's stream URLs ('' for local files or another server's tracks). */
+  function ndSongId(path, c = ndCfg()) {
+    const m = /^(https?:\/\/[^?#]+)\/rest\/stream(?:\.view)?\?([^#]*)$/i.exec(path || '');
+    if (!c || !m || m[1].toLowerCase() !== c.url.toLowerCase()) return '';
+    return new URLSearchParams(m[2]).get('id') || '';
+  }
+  /** Append songs to a playlist on the server (updatePlaylist; 100 ids per call keeps the URL short). */
+  async function ndAddToPlaylist(playlistId, songIds) {
+    for (let k = 0; k < songIds.length; k += 100) {
+      await nd('updatePlaylist', 'playlistId=' + encodeURIComponent(playlistId) + songIds.slice(k, k + 100).map((id) => '&songIdToAdd=' + encodeURIComponent(id)).join(''), undefined, 20000);
+    }
+  }
+  /** One playlist with its songs in playlist order (entry). */
+  async function ndPlaylist(id) {
+    const r = await nd('getPlaylist', 'id=' + encodeURIComponent(id), undefined, 20000);
+    return r.playlist || { entry: [] };
+  }
   /** Every album on the server (getAlbumList2 pages of 500); onPage(albumsSoFar) after each page. */
   async function ndAllAlbums(onPage) {
     const all = [];
@@ -1223,11 +1244,11 @@ const Y2K = (() => {
   function playPaths(paths, startPath) { loadPaths(paths, startPath, true); }
   /** Replace "Library Selection" with these tracks; play, or just focus `startPath`. */
   let loadJob = 0;
-  function loadPaths(paths, startPath, play) {
+  function loadPaths(paths, startPath, play) { loadList([...new Set(paths.filter(Boolean))], startPath, play); }
+  /** loadPaths for a list that's already in shape (a saved playlist keeps a song it has twice). */
+  function loadList(uniq, startPath, play) {
     const pl = playlistIndexByName(LIBSEL, true);
-    if (pl < 0) return;
-    const uniq = [...new Set(paths.filter(Boolean))];
-    if (!uniq.length) return;
+    if (pl < 0 || !uniq.length) return;
     const start = Math.max(0, startPath ? uniq.indexOf(startPath) : 0);
     // a newer load (another double-click) cancels this one, so two albums never mix
     const job = ++loadJob, alive = () => job === loadJob;
@@ -1249,6 +1270,364 @@ const Y2K = (() => {
       insertInOrder(pl, uniq, false, { alive, onItem: (k, index) => { if (k === start) begin(index); }, done: () => begin(0) });
     };
     cleared();
+  }
+
+  /* --------------------------------------------------------------- saved playlists
+     The theme's own playlist shelf (Library Selection's SAVE / SAVED buttons). A saved playlist keeps each track's
+     path plus the tags to list it, so the shelf shows it without foobar2000 and it outlives foobar2000's own
+     playlist being cleared or deleted. foo_webview2 can't write files, so they live in IndexedDB 'y2k-saved' in the
+     panels' WebView2 profile (profile\webview\data), shared by every panel; 'y2k:savedPl' is bumped on each change.
+     Record: { id, name, created, updated, n, secs, tracks: [{ p: path, s: subsong, t: title, a: artist, aa: album
+     artist, al: album, y: year, l: length, ls: seconds, d: folder }] } */
+  const savedDb = (() => {
+    let dbp;
+    const open = () => dbp || (dbp = new Promise((res, rej) => {
+      const r = indexedDB.open('y2k-saved', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('pl', { keyPath: 'id' });
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    }));
+    const tx = (mode, fn) => open().then((db) => new Promise((res, rej) => {
+      const t = db.transaction('pl', mode), q = fn(t.objectStore('pl'));
+      t.oncomplete = () => res(q && q.result); t.onerror = () => rej(t.error);
+    }));
+    // other panels hear the storage event; the shelf window (run by this panel) is refreshed directly
+    const bump = () => { safe(() => localStorage.setItem('y2k:savedPl', String(Date.now()))); if (shelf) shelf.refresh(); };
+    return {
+      list: () => tx('readonly', (s) => s.getAll()).then((l) => (l || []).sort((x, y) => x.name.localeCompare(y.name, undefined, { numeric: true, sensitivity: 'base' }))),
+      put: (rec) => tx('readwrite', (s) => s.put(rec)).then(bump).then(() => autoExport(rec)),
+      del: (id) => tx('readwrite', (s) => s.delete(id)).then(bump),
+    };
+  })();
+  const savedFind = (list, name) => list.find((x) => x.name.trim().toLowerCase() === String(name || '').trim().toLowerCase());
+  /** Save tracks under this name; a saved playlist with the same name is replaced (it keeps its id, date and file). */
+  async function savePlaylist(name, tracks) {
+    name = String(name || '').trim();
+    if (!name) throw new Error('Give the playlist a name');
+    if (name.toLowerCase() === LIBSEL.toLowerCase()) throw new Error('Pick another name: Library Selection is the Media Library\'s');
+    if (!tracks.length) throw new Error('This playlist is empty');
+    const old = savedFind(await savedDb.list(), name), now = Date.now();
+    const rec = { id: old ? old.id : now.toString(36) + Math.random().toString(36).slice(2, 7), name, created: old ? old.created : now, updated: now,
+      n: tracks.length, secs: tracks.reduce((s, t) => s + (t.ls || 0), 0), tracks, file: old ? old.file : '', fileHash: old ? old.fileHash : '' };
+    await savedDb.put(rec);
+    return rec;
+  }
+  /** Add tracks to the end of a saved playlist. */
+  async function appendSaved(id, tracks) {
+    const rec = (await savedDb.list()).find((x) => x.id === id);
+    if (!rec) throw new Error('That saved playlist is gone');
+    rec.tracks = rec.tracks.concat(tracks);
+    rec.n = rec.tracks.length; rec.secs = rec.tracks.reduce((s, t) => s + (t.ls || 0), 0); rec.updated = Date.now();
+    await savedDb.put(rec);
+    return rec;
+  }
+  /** A saved playlist's paths for foobar2000: every track, in order, repeats kept; a cue sheet's tracks (a subsong of
+      one file) come in all at once from one addPath, so each such file is added only once. */
+  function savedPaths(rec) {
+    const seen = new Set(), out = [];
+    for (const t of rec.tracks) {
+      if (!t.p) continue;
+      if (t.s && t.s !== '0') { if (seen.has(t.p)) continue; seen.add(t.p); }
+      out.push(t.p);
+    }
+    return out;
+  }
+  const playSaved = (rec, startPath) => loadList(savedPaths(rec), startPath, true);
+
+  /* A saved playlist and the foobar2000 playlist with the same name are linked: Library Selection writes every change
+     made in that playlist (songs added, removed, moved) back to the saved one, and renaming either renames the other.
+     While the theme fills such a playlist (open / save), syncHold has its name, so half-filled states are never
+     written; if some songs couldn't be added (drive unplugged, server down), noSync gets it and that playlist stops
+     writing back, so the saved copy keeps the missing songs. */
+  const syncHold = new Set(), noSync = new Set();
+  const lc = (s) => String(s || '').trim().toLowerCase();
+  /** A name for a new playlist that no open playlist and no saved one has: base, base (2), ... (a new playlist named
+      like a saved one would link to it and overwrite it on its first change). */
+  async function freePlaylistName(base) {
+    const saved = await savedDb.list().catch(() => []);
+    const taken = (s) => safe(() => H.findPlaylist(s), -1) >= 0 || !!savedFind(saved, s) || lc(s) === lc(LIBSEL);
+    if (!taken(base)) return base;
+    for (let k = 2; ; k++) if (!taken(base + ' (' + k + ')')) return base + ' (' + k + ')';
+  }
+  /** Fill playlist n (by its name) with paths; then(added, wanted). */
+  function fillPlaylist(n, paths, then) {
+    const name = lc(safe(() => H.getPlaylistName(n), ''));
+    syncHold.add(name); noSync.delete(name);
+    const before = safe(() => H.getPlaylistItemCount(n), 0);
+    insertInOrder(n, paths, false, { done: () => {
+      const added = safe(() => H.getPlaylistItemCount(n), 0) - before;
+      if (added < paths.length) noSync.add(name);
+      setTimeout(() => { syncHold.delete(name); if (then) then(added, paths.length); }, 1200);   // let its last change events pass first
+    } });
+  }
+  /** Open a saved playlist as a foobar2000 playlist (the one already open under its name, if there is one). */
+  function openSaved(rec, then) {
+    let n = safe(() => H.findPlaylist(rec.name), -1);
+    if (n >= 0) { safe(() => { H.activePlaylist = n; }); if (then) then(-1, 0); return n; }
+    n = safe(() => H.createPlaylist(H.playlistCount, rec.name), -1);
+    if (n < 0) return -1;
+    safe(() => { H.activePlaylist = n; });
+    fillPlaylist(n, savedPaths(rec), then);
+    return n;
+  }
+  function addSaved(rec) {
+    let pl = safe(() => H.activePlaylist, -1);
+    if (pl < 0) pl = playlistIndexByName(LIBSEL, true);
+    insertInOrder(pl, savedPaths(rec), false);
+  }
+
+  /* EXPORT: a saved playlist as an .m3u8 file (tools\export-playlist.ps1 writes it, see there). Once exported, the file
+     is rewritten after every change (autoExport), quietly, at the same place; rec.file / rec.fileHash say where and
+     what was last written, rec.fileErr why the last rewrite failed. */
+  const m3uLine = (s) => String(s || '').replace(/[\r\n]+/g, ' ');
+  function m3uText(rec) {
+    return '#EXTM3U\n#PLAYLIST:' + m3uLine(rec.name) + '\n' + rec.tracks.filter((t) => t.p).map((t) =>
+      '#EXTINF:' + (Math.round(t.ls) || -1) + ',' + m3uLine((t.a ? t.a + ' - ' : '') + (t.t || '')) + '\n' + t.p).join('\n') + '\n';
+  }
+  const fnv = (s) => { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619) >>> 0; return h.toString(36) + ':' + s.length; };
+  const b64utf8 = (s) => btoa(String.fromCharCode(...new TextEncoder().encode(s)));
+  async function gzip64(text) {
+    const buf = new Uint8Array(await new Response(new Blob([text]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer());
+    let bin = '';
+    for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+    return btoa(bin);
+  }
+  /** Runs the export tool; resolves { status: 'ok' | 'cancel' | 'error', path, message }. out = '' asks where to save. */
+  async function exportM3u(rec, out) {
+    const ps1 = (profileDir + '/webview/y2k/tools/export-playlist.ps1').split('/').join(BS);
+    const job = Date.now().toString(36) + Math.random().toString(36).slice(2, 8), data = await gzip64(m3uText(rec));
+    const parts = []; for (let i = 0; i < data.length; i += 24000) parts.push(data.slice(i, i + 24000));
+    if (!parts.length) parts.push('');
+    const extra = ' -NameB64 "' + b64utf8(rec.name) + '"' + (out ? ' -OutB64 "' + b64utf8(out) + '"' : '');
+    parts.forEach((d, i) => safe(() => H.execute('powershell.exe', '-NoProfile -ExecutionPolicy Bypass' + (out ? '' : ' -STA') + ' -WindowStyle Hidden -File "' + ps1 +
+      '" -Job ' + job + ' -Part ' + i + ' -Parts ' + parts.length + ' -Data "' + d + '"' + extra, '', 'open', 0)));
+    // the tool drops its answer in exportcache\<job>.json (a Save As box may stay open a while)
+    const until = Date.now() + (out ? 60000 : 15 * 60000);
+    while (Date.now() < until) {
+      await new Promise((r) => setTimeout(r, 400));
+      const res = await fetch('exportcache/' + job + '.json?' + Date.now(), { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+      if (res) return res;
+    }
+    return { status: 'error', message: 'The export tool didn\'t answer' };
+  }
+  /** EXPORT button: asks where, then remembers the file so later changes rewrite it. */
+  async function exportSaved(rec) {
+    const res = await exportM3u(rec, '');
+    if (res.status !== 'ok') return res;
+    const cur = (await savedDb.list()).find((x) => x.id === rec.id) || rec;
+    cur.file = res.path; cur.fileHash = fnv(m3uText(cur)); cur.fileErr = '';
+    exportPending.set(cur.id, cur.fileHash);
+    await savedDb.put(cur);
+    return res;
+  }
+  const exportPending = new Map(), exportTimers = new Map();   // id -> hash being / last written; id -> debounce
+  function autoExport(rec) {
+    if (!rec.file) return;
+    const h = fnv(m3uText(rec));
+    if (h === rec.fileHash || exportPending.get(rec.id) === h) return;
+    clearTimeout(exportTimers.get(rec.id));
+    exportTimers.set(rec.id, setTimeout(async () => {
+      exportTimers.delete(rec.id);
+      const cur = (await savedDb.list()).find((x) => x.id === rec.id);
+      if (!cur || !cur.file) return;
+      const hh = fnv(m3uText(cur));
+      if (hh === cur.fileHash || exportPending.get(cur.id) === hh) return;
+      exportPending.set(cur.id, hh);   // a failed write isn't retried until the playlist changes again
+      const res = await exportM3u(cur, cur.file);
+      const now = (await savedDb.list()).find((x) => x.id === cur.id);
+      if (!now) return;
+      if (res.status === 'ok') { now.fileHash = hh; now.fileErr = ''; } else now.fileErr = res.message || 'not written';
+      await savedDb.put(now);
+    }, 2500));
+  }
+
+  /* A Metalheart window of its own (same rules as the rip log's): a popup that stays a theme window, not a browser.
+     Returns its document, or null when no window can be opened (the caller then shows an overlay in the panel).
+     onGone runs when it's closed by its X, by Esc, or the panel reloads. */
+  function themedWindow(name, title, W, Hh, onGone) {
+    W = Math.min(W, screen.availWidth - 40); Hh = Math.min(Hh, screen.availHeight - 60);
+    const L = Math.max(screen.availLeft || 0, Math.round(window.screenX + (window.outerWidth - W) / 2)), T = Math.max(screen.availTop || 0, Math.round(window.screenY + 40));
+    const w = safe(() => window.open('', name, 'popup,width=' + W + ',height=' + Hh + ',left=' + L + ',top=' + T), null);
+    if (!w || !safe(() => w.document, null)) return null;
+    const d = w.document;
+    d.open();
+    d.write('<!doctype html><html><head><meta charset="utf-8"><base href="' + esc(document.baseURI) + '"><title>' + esc(title) + '</title></head><body></body></html>');
+    d.close();
+    const styles = [...document.querySelectorAll('link[rel=stylesheet], style')].map((n) => [n, d.head.appendChild(d.importNode(n, true))]);
+    const st = d.createElement('style');
+    st.textContent = 'html, body { margin: 0; height: 100%; overflow: hidden; background: #121820; }'
+      + ' .logv.popped { position: static; height: 100%; padding: 0; display: flex; background: none; }'
+      + ' .logv.popped .logv-win { width: 100%; height: 100%; border-radius: 0; border: none; box-shadow: none; }';
+    d.head.appendChild(st);
+    // the theme colours follow the panel's (the scheme rewrites the panel's <style> elements)
+    const sync = () => { for (const [src, dst] of styles) if (src.tagName === 'STYLE' && dst.textContent !== src.textContent) dst.textContent = src.textContent; };
+    let gone = false;
+    const end = () => { if (gone) return; gone = true; clearInterval(poll); onGone(); setTimeout(() => safe(() => w.close()), 0); };
+    w.addEventListener('pagehide', end);
+    w.addEventListener('keydown', (e) => {
+      const k = (e.key || '').toLowerCase();
+      if (k === 'escape') { e.preventDefault(); end(); return; }
+      const edit = ['c', 'a', 'v', 'x', 'z', 'y'].includes(k) && !e.altKey;   // typing a name still copies / pastes / undoes
+      if (((e.ctrlKey || e.metaKey) && !edit) || (e.altKey && k !== 'alt') || /^f\d+$/.test(k) || k.startsWith('browser')) e.preventDefault();
+    }, true);
+    for (const ev of ['mousedown', 'mouseup', 'auxclick']) w.addEventListener(ev, (e) => { if (e.button === 3 || e.button === 4) e.preventDefault(); }, true);
+    w.addEventListener('contextmenu', (e) => { if (!/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) e.preventDefault(); }, true);
+    w.addEventListener('dragover', (e) => e.preventDefault(), true);
+    w.addEventListener('drop', (e) => e.preventDefault(), true);
+    window.addEventListener('pagehide', end, { once: true });
+    const poll = setInterval(() => { if (w.closed || !safe(() => w.document === d, false)) end(); else sync(); }, 250);
+    safe(() => w.focus());
+    return { doc: d, win: w, close: end };
+  }
+
+  /* SAVED PLAYLISTS window: the shelf on the left, the picked playlist on the right (Play / Add / Open as playlist /
+     Rename / Delete, double-click a track to play from it). save = { name, tracks } offers to save the panel's
+     current playlist in a bar on top (focus: put the cursor in its name box). */
+  let shelf = null;   // { root, doc, close, refresh }
+  function showSavedPlaylists(save, focus) {
+    if (shelf) shelf.close();
+    let pop = null, root, doc, keyFn = null;
+    const close = () => {
+      if (!shelf || shelf.root !== root) return;
+      shelf = null;
+      if (keyFn) document.removeEventListener('keydown', keyFn, true);
+      window.removeEventListener('storage', onStore);
+      if (pop) pop.close(); else root.remove();
+    };
+    pop = themedWindow('metalheart-saved', 'Saved Playlists — Metalheart', 820, 600, () => { pop = null; close(); });
+    doc = pop ? pop.doc : document;
+    root = doc.createElement('div');
+    root.className = 'logv spl' + (pop ? ' popped' : '');
+    root.innerHTML = '<div class="logv-win"><div class="logv-head"><b>SAVED PLAYLISTS</b><span class="logv-sub" id="splCount"></span><span class="logv-sp"></span>' +
+      '<span class="logv-btn lime" data-act="close" title="Close (Esc)">DONE</span></div>' +
+      (save ? '<div class="spl-save"><span class="spl-lbl">SAVE</span><input id="splName" type="text" spellcheck="false" maxlength="120" placeholder="Name this playlist">' +
+        '<span class="logv-btn lime" id="splSave">SAVE</span><span class="spl-msg" id="splMsg"></span></div>' : '') +
+      '<div class="spl-main"><div class="spl-list" id="splList"></div><div class="spl-detail" id="splDetail"></div></div></div>';
+    doc.body.appendChild(root);
+    const $s = (id) => root.querySelector('#' + id);
+    if (!pop) {
+      keyFn = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); } };
+      document.addEventListener('keydown', keyFn, true);
+      root.addEventListener('mousedown', (e) => { if (e.target === root) close(); });
+    }
+    root.querySelector('[data-act="close"]').onclick = close;
+
+    let list = [], pick = '', renaming = false, armed = 0, note = null;   // note: { id, text, cls } under the picked one's title
+    const setNote = (id, text, cls) => { note = text ? { id, text, cls } : null; if (pick === id) drawDetail(); };
+    const when = (t) => { const d = new Date(t); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+    const dur = (s) => { s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60); return h ? h + 'h ' + String(m).padStart(2, '0') + 'm' : m + 'm ' + String(s % 60).padStart(2, '0') + 's'; };
+    // a 2x2 mosaic of the first four albums' covers (one cover when it's all one album)
+    function covers(el, rec, size) {
+      const seen = new Set(), picks = [];
+      for (const t of rec.tracks) { const k = (t.d || t.p).toLowerCase(); if (!seen.has(k)) { seen.add(k); picks.push(t); if (picks.length === 4) break; } }
+      const use = picks.length >= 4 ? picks : picks.slice(0, 1);
+      el.classList.toggle('quad', use.length === 4);
+      el.innerHTML = use.map(() => '<i></i>').join('');
+      use.forEach((t, k) => thumb(toFwd(t.d || ''), use.length === 4 ? size >> 1 : size, t.p).then((u) => { const c = el.children[k]; if (u && c) c.style.backgroundImage = 'url("' + u + '")'; }));
+    }
+    function saveBar() {
+      if (!save) return;
+      const inp = $s('splName'), b = $s('splSave'), dup = savedFind(list, inp.value);
+      b.textContent = dup ? 'REPLACE' : 'SAVE';
+      b.title = dup ? 'Replace the saved “' + dup.name + '” with this playlist' : 'Save this playlist (' + save.tracks.length + ' tracks) on the shelf';
+    }
+    function drawList() {
+      $s('splCount').textContent = list.length + (list.length === 1 ? ' PLAYLIST' : ' PLAYLISTS');
+      const box = $s('splList');
+      if (!list.length) { box.innerHTML = '<div class="logv-wait">NOTHING SAVED YET<br><span>Right-click songs in Library Selection › Add to playlist › New saved playlist, or right-click a playlist tab › Save playlist</span></div>'; return; }
+      box.innerHTML = list.map((r) => '<div class="spl-item' + (r.id === pick ? ' on' : '') + '" data-id="' + esc(r.id) + '"><div class="spl-cv"></div><div class="spl-txt"><div class="spl-nm">' + esc(r.name) + '</div>' +
+        '<div class="spl-sub">' + r.n + (r.n === 1 ? ' TRACK' : ' TRACKS') + ' · ' + esc(dur(r.secs)) + '</div></div></div>').join('');
+      box.querySelectorAll('.spl-item').forEach((el) => {
+        const r = list.find((x) => x.id === el.dataset.id);
+        covers(el.querySelector('.spl-cv'), r, 80);
+        el.onclick = () => { pick = r.id; renaming = false; armed = 0; drawList(); drawDetail(); };
+        el.ondblclick = () => playSaved(r);
+      });
+    }
+    function drawDetail() {
+      const box = $s('splDetail'), r = list.find((x) => x.id === pick);
+      if (!r) { box.innerHTML = list.length ? '<div class="logv-wait">PICK A PLAYLIST<br><span>Double-click one to play it</span></div>' : ''; return; }
+      box.innerHTML = '<div class="spl-head"><div class="spl-big" id="splBig"></div><div class="spl-info">' +
+        (renaming ? '<input id="splRen" type="text" spellcheck="false" maxlength="120" value="' + esc(r.name) + '">' : '<div class="spl-title" title="Double-click to rename">' + esc(r.name) + '</div>') +
+        '<div class="spl-meta">' + r.n + (r.n === 1 ? ' track' : ' tracks') + ' · ' + esc(dur(r.secs)) + ' · saved ' + when(r.updated) + '</div>' +
+        (r.file ? '<div class="spl-file' + (r.fileErr ? ' bad' : '') + '" title="' + esc(r.fileErr ? 'Last update failed: ' + r.fileErr : 'Rewritten after every change') + '"><em>' + (r.fileErr ? 'FILE NOT UPDATED' : 'FILE') + '</em>' + esc(r.file) + '</div>' : '') +
+        (note && note.id === r.id ? '<div class="spl-note ' + note.cls + '">' + esc(note.text) + '</div>' : '') +
+        '<div class="spl-btns"><span class="logv-btn lime" data-act="play" title="Play it in Library Selection">▶ PLAY</span><span class="logv-btn" data-act="add" title="Add its tracks to the end of the current playlist">+ ADD</span>' +
+        '<span class="logv-btn" data-act="open" title="Open it as a playlist tab: songs you add or remove there are saved here automatically">OPEN AS PLAYLIST</span>' +
+        '<span class="logv-btn" data-act="export" title="' + (r.file ? 'Save it as an .m3u8 file somewhere else (that file is then the one kept up to date)' : 'Save it as an .m3u8 file; the file is then kept up to date when the playlist changes') + '">' + (r.file ? 'EXPORT AGAIN…' : 'EXPORT…') + '</span>' +
+        (r.file ? '<span class="logv-btn" data-act="folder" title="Show the exported file\'s folder">FOLDER</span>' : '') +
+        '<span class="logv-btn" data-act="ren">' + (renaming ? 'OK' : 'RENAME') + '</span>' +
+        '<span class="logv-btn' + (armed ? ' warn' : '') + '" data-act="del" title="Remove it from the shelf (your music files and an exported file are not touched)">' + (armed ? 'SURE? DELETE' : 'DELETE') + '</span></div></div></div>' +
+        '<div class="spl-tracks">' + r.tracks.map((t, i) => '<div class="spl-tr" data-i="' + i + '"><span class="n">' + (i + 1) + '</span><span class="tt">' + esc(t.t || toFwd(t.p).split('/').pop()) +
+          (t.a ? ' <em>— ' + esc(t.a) + '</em>' : '') + '</span><span class="n">' + esc(t.l || '') + '</span></div>').join('') + '</div>';
+      covers($s('splBig'), r, 192);
+      const title = box.querySelector('.spl-title');
+      if (title) title.ondblclick = () => { renaming = true; drawDetail(); };
+      const ren = $s('splRen');
+      const doRename = async () => {
+        const v = ren.value.trim(), other = savedFind(list, v);
+        renaming = false;
+        if (v && v !== r.name && (!other || other.id === r.id) && lc(v) !== lc(LIBSEL)) {
+          // the open playlist of the old name follows, so the two stay linked
+          const fi = safe(() => H.findPlaylist(r.name), -1), wasNo = noSync.delete(lc(r.name));
+          if (fi >= 0) { syncHold.add(lc(v)); safe(() => H.setPlaylistName(fi, v)); setTimeout(() => syncHold.delete(lc(v)), 800); }
+          if (wasNo) noSync.add(lc(v));
+          r.name = v; await savedDb.put(r); await refresh();
+        } else drawDetail();
+      };
+      if (ren) { ren.focus(); ren.select(); ren.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') doRename(); if (e.key === 'Escape') { renaming = false; drawDetail(); } }; }
+      box.querySelector('.spl-btns').onclick = async (e) => {
+        const act = e.target.dataset && e.target.dataset.act;
+        if (act === 'play') playSaved(r);
+        else if (act === 'add') addSaved(r);
+        else if (act === 'open') {
+          openSaved(r, (added, wanted) => {
+            if (added >= 0 && added < wanted) setNote(r.id, (wanted - added) + ' OF ' + wanted + ' SONGS COULDN\'T BE FOUND · THAT TAB WON\'T CHANGE THIS SAVED PLAYLIST', 'bad');
+          });
+        }
+        else if (act === 'export') {
+          setNote(r.id, 'CHOOSE WHERE TO SAVE THE FILE…', '');
+          const res = await exportSaved(r);
+          setNote(r.id, res.status === 'ok' ? 'EXPORTED ✓ · KEPT UP TO DATE FROM NOW ON' : res.status === 'cancel' ? '' : 'NOT EXPORTED: ' + String(res.message || '').toUpperCase(), res.status === 'ok' ? 'ok' : 'bad');
+        }
+        else if (act === 'folder') safe(() => H.execute('explorer.exe', '/select,"' + r.file + '"', '', 'open', 1));
+        else if (act === 'ren') { if (renaming) doRename(); else { renaming = true; drawDetail(); } }
+        else if (act === 'del') {
+          if (!armed) { armed = setTimeout(() => { armed = 0; if (pick === r.id) drawDetail(); }, 3000); drawDetail(); return; }
+          clearTimeout(armed); armed = 0;
+          await savedDb.del(r.id); pick = ''; await refresh();
+        }
+      };
+      box.querySelectorAll('.spl-tr').forEach((el) => { el.ondblclick = () => { const t = r.tracks[+el.dataset.i]; playSaved(r, t.p); }; el.title = 'Double-click to play from here'; });
+    }
+    async function refresh() {
+      list = await savedDb.list().catch(() => []);
+      if (!shelf || shelf.root !== root) return;
+      if (pick && !list.some((x) => x.id === pick)) pick = '';
+      if (!pick && list.length) pick = list[0].id;
+      drawList(); drawDetail(); saveBar();
+    }
+    // another panel saved or deleted one
+    const onStore = (e) => { if (e.key === 'y2k:savedPl') refresh(); };
+    window.addEventListener('storage', onStore);
+    shelf = { root, doc, close, refresh };
+    if (save) {
+      const inp = $s('splName'), msg = (t, cls) => { $s('splMsg').textContent = t; $s('splMsg').className = 'spl-msg ' + (cls || ''); };
+      inp.value = save.name && save.name !== LIBSEL ? save.name : '';
+      if (!save.tracks.length) { msg('THIS PLAYLIST IS EMPTY', 'bad'); }
+      inp.oninput = () => { saveBar(); msg(''); };
+      const go = async () => {
+        try {
+          const replaced = !!savedFind(list, inp.value), rec = await savePlaylist(inp.value, save.tracks);
+          pick = rec.id; msg('SAVED ✓ ' + rec.n + ' TRACKS · ITS TAB SAVES CHANGES BY ITSELF', 'ok'); await refresh();
+          if (save.onSaved) save.onSaved(rec, replaced);
+        }
+        catch (e) { msg(String(e.message || e).toUpperCase(), 'bad'); }
+      };
+      $s('splSave').onclick = go;
+      inp.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') go(); if (e.key === 'Escape') close(); };
+      if (focus) { inp.focus(); inp.select(); }
+    }
+    refresh();
   }
 
   /* ------------------------------------------------------------------ colour scheme
@@ -1434,9 +1813,11 @@ const Y2K = (() => {
     get scheme() { return scheme; }, get schemeMode() { return mode; },
     LOOK_CHROME, LOOK_CAPS, setLook, applyLook, get look() { return look; },
     thumb, embeddedArt, isArtPl, findDirArtFile, idb, onRipLog, showRipLog, closeRipLog, ripLogText, countryCode, mediaLabel, addPaths, playPaths, loadPaths, playlistIndexByName, toFwd, SEP,
+    savedDb, savePlaylist, appendSaved, playSaved, openSaved, addSaved, showSavedPlaylists, themedWindow,
+    syncHold, noSync, fillPlaylist, exportSaved, m3uText, freePlaylistName,
     H, BS, esc, log, safe, getTrack, listDir, readText, readImage, resolveArt, findRipLog, parseRipLog,
     countryName, flagHTML, flagFile, barcodeSVG, mb, getJSON, store, artistCountry, openUrl, openFile, runCommand, runFb2k, VERSION, checkUpdate,
-    ND_KEY, ndCfg, nd, ndCover, ndStream, ndSongs, ndPaths, ndAllAlbums, ndConnect, ndForget,
+    ND_KEY, ndCfg, nd, ndCover, ndStream, ndSongs, ndPaths, ndPlaylists, ndPlaylist, ndSongId, ndAddToPlaylist, ndAllAlbums, ndConnect, ndForget,
     fmtTime, qualityOf, firstOf, clean, debounce, onTrackContextChange, trackKey, profileDir, exePath, DAY, parseLRC, lyricWords,
   };
 })();

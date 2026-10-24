@@ -84,14 +84,14 @@
      Paste your User Token from https://listenbrainz.org/settings/ and tick
      "Enable submission". Every track you play is then logged to your profile.
 
-  3. Navidrome / Subsonic server (optional)
-     Click + NAVIDROME at the top of the Media Library and enter the server's
-     address (the one you open Navidrome at in a browser, e.g.
-     192.168.1.10:4533), your user and password. The server's albums then show
-     up in the Media Library (NAVIDROME badge) and play straight from the
-     server; the Artist Bio panel uses the same server. foo_navidrome's own
-     browser (NAVIDROME button in the control pod) is set up separately in
-     File > Preferences > Tools > Navidrome.
+  3. Navidrome / Subsonic server (optional, no component needed)
+     Click + NAVIDROME at the top of the Media Library (or NAVIDROME in the
+     control pod) and enter the server's address (the one you open Navidrome
+     at in a browser, e.g. 192.168.1.10:4533), your user and password. The
+     server's albums then show up in the Media Library (NAVIDROME badge) and
+     play straight from the server; the Artist Bio panel uses the same server.
+     PLAYLISTS, next to the Media Library's search box, lists your Navidrome
+     playlists: open one to play it, add it, or copy it into a new playlist.
 
 
 ---------------------------------------------------------------------
@@ -195,12 +195,24 @@
 
   PLAYLIST (centre) — custom playlist view
     Glossy playlist tabs (click to switch, double-click to rename,
-    right-click for rename/duplicate/delete, middle-click to close, + for new).
+    right-click for rename/duplicate/save/close, ✕ or middle-click to close,
+    + for new). Closing a playlist with songs that isn't saved asks first
+    (the tab turns red: CLOSE?).
     Album groups with cover, label, country flag, format and running time.
     Click / Ctrl+click / Shift+click to select, double-click or Enter to play,
     Delete to remove, Ctrl+A select all, Ctrl+F filter. Right-click a track for
-    queue / send to new playlist / crop / open folder. FOLLOW keeps the playing
-    track in view. Files can't be dragged from Explorer onto this panel — use
+    queue / send to new playlist / crop / open folder. Send to new playlist
+    starts one and keeps you here; "Add to “New Playlist”" keeps filling it,
+    and Add to playlist ▸ adds to a saved playlist (or a Navidrome one). FOLLOW keeps the playing
+    track in view. Add to playlist ▸ New saved playlist… (songs) or a tab's
+    Save playlist… (all of it) keeps it on the theme's own shelf (name it,
+    Enter; the same name replaces the saved one). It opens as a tab of that
+    name, and every song you add, remove or move there is saved by itself.
+    EXPORT… in the shelf writes an .m3u8 file, rewritten after each change.
+    SAVED opens the shelf in its
+    own window: play, add, open as a playlist again, rename or delete. Saved
+    playlists keep their order and repeats, and outlive the foobar2000
+    playlist they came from. Files can't be dragged from Explorer onto this panel — use
     File > Add files / Add folder in the menu bar, or the library.
     Prefer the classic foobar2000 panels (tag editing, drag & drop, sorting)?
     Import layouts\Metalheart-Y2K-classic.fcl (see TIPS below).
@@ -275,9 +287,8 @@
   OpenLyrics ........... jacquesh       https://www.foobar2000.org/components/view/foo_openlyrics
   MilkDrop 2 ........... J. Cassis      https://www.foobar2000.org/components/view/foo_vis_milk2
   ListenBrainz 2 ....... phw            https://github.com/phw/foo_listenbrainz2/releases  (optional)
-  Navidrome / Subsonic . santiagorod92  https://www.foobar2000.org/components/view/foo_navidrome  (optional)
   Tested with Columns UI 3.7.0, Album List 2.2.0, WebView2 0.3.27, OpenLyrics 1.13,
-  MilkDrop 2 0.9.14, ListenBrainz 2 1.5.0, Navidrome 1.19.0.
+  MilkDrop 2 0.9.14, ListenBrainz 2 1.5.0.
 
 ---------------------------------------------------------------------
  CREDITS & LICENCES FOR BUNDLED ASSETS

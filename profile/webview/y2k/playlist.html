@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>Metalheart Playlist</title>
-<link rel="stylesheet" href="common.css?v=23">
+<link rel="stylesheet" href="common.css?v=29">
 <style>
   body { display: flex; flex-direction: column; background: #121921; }
   .top { flex: none; padding: 3px 4px 0; display: flex; flex-direction: column; gap: 4px; }
@@ -32,6 +32,13 @@
   .tab.active { color: rgb(var(--c0d1f02)); background: linear-gradient(180deg, rgba(255,255,255,.55), rgba(255,255,255,.08) 50%, transparent 51%), linear-gradient(180deg, var(--lime-1), var(--lime-3)); border-color: var(--lime-4); box-shadow: 0 0 8px rgba(var(--c9cff2e),.35); }
   .tab .np { width: 0; height: 0; border-left: 6px solid currentColor; border-top: 4px solid transparent; border-bottom: 4px solid transparent; }
   .tab.add { padding: 0 9px; font-size: 13px; }
+  /* close button: shown on the open tab and on hover; a playlist that isn't saved asks once ("CLOSE?") */
+  .tab { position: relative; }
+  .tab .x { flex: none; width: 13px; height: 13px; margin-right: -5px; border-radius: 7px; display: grid; place-items: center; font: 700 8px/1 var(--ui); opacity: 0; transition: opacity .12s; }
+  .tab:hover .x, .tab.active .x { opacity: .55; }
+  .tab .x:hover { opacity: 1; background: rgba(0,0,0,.3); }
+  .tab.arm { color: #fff; background: linear-gradient(180deg, #d4532f, #7e2412); border-color: #3a0c03; box-shadow: none; }
+  .tab.arm .x { width: auto; padding: 0 5px; opacity: 1; font: 400 7px/13px var(--pixel); letter-spacing: .08em; background: rgba(0,0,0,.3); }
   .tab input { width: 120px; height: 15px; font: 700 10.5px var(--ui); border: none; outline: none; background: #0b1016; color: #fff; border-radius: 3px; padding: 0 4px; }
 
   /* list */
@@ -82,6 +89,21 @@
   .menu div { padding: 5px 12px; border-radius: 5px; font: 12px var(--ui); color: #dbe4ee; cursor: pointer; white-space: nowrap; }
   .menu div:hover { background: linear-gradient(180deg, var(--sel-0), var(--sel-1)); color: #fff; }
   .menu hr { border: none; border-top: 1px solid rgba(255,255,255,.08); margin: 3px 4px; }
+  .menu { max-height: calc(100vh - 8px); overflow-y: auto; max-width: 300px; }
+  .menu div { overflow: hidden; text-overflow: ellipsis; }
+  .menu div.sub { position: relative; padding-right: 26px; }
+  .menu div.sub::after { content: "▸"; position: absolute; right: 10px; color: var(--blue-1); }
+  .menu div.sub.open { background: linear-gradient(180deg, var(--sel-0), var(--sel-1)); color: #fff; }
+  .menu div.head { cursor: default; padding: 6px 12px 3px; font: 400 7.5px/1 var(--pixel); letter-spacing: .12em; color: var(--blue-1); }
+  .menu div.head:hover { background: none; color: var(--blue-1); }
+  .menu div.off { cursor: default; color: #6d7a88; }
+  .menu div.off:hover { background: none; color: #6d7a88; }
+  /* a short confirmation at the bottom of the panel ("ADDED 3 → Late Night") */
+  .toast { position: fixed; left: 50%; bottom: 12px; z-index: 45; transform: translateX(-50%); max-width: calc(100% - 24px); padding: 6px 14px; border-radius: 12px; pointer-events: none;
+    font: 400 8px/1.4 var(--pixel); letter-spacing: .08em; color: var(--lime-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    background: linear-gradient(180deg, #2a343f, #161d25); border: 1px solid #000; box-shadow: 0 6px 18px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.12); transition: opacity .25s; }
+  .toast.bad { color: #ff8a7a; }
+  .toast[hidden] { display: block; opacity: 0; }
 </style>
 </head>
 <body>
@@ -91,6 +113,7 @@
       <span id="meta"></span>
       <input class="search" id="q" placeholder="Filter playlist…" spellcheck="false">
       <span class="ibtn on" id="follow" title="Keep the playing track in view">FOLLOW</span>
+      <span class="ibtn" id="savedpl" title="Your saved playlists">SAVED</span>
       <span class="ibtn" data-cmd="Search" title="Search the media library (results open as a playlist)">SEARCH</span>
       <span class="ibtn" data-cmd="Configure" title="Choose the music folders of your media library">+ MUSIC</span>
     </span>
@@ -99,8 +122,9 @@
 </div>
 <div class="cols"><span></span><span>#</span><span>TITLE</span><span>ARTIST</span><span>YEAR</span><span>QUALITY</span><span>PLAYS</span><span>TIME</span></div>
 <div class="viewport" id="vp" tabindex="0"><div class="spacer" id="sp"></div></div>
+<div class="toast" id="toast" hidden></div>
 
-<script src="common.js?v=23"></script><script>Y2K.scopeAccent(document.body, 2); /* MULTI album colours: accent channel 2 */</script>
+<script src="common.js?v=29"></script><script>Y2K.scopeAccent(document.body, 2); /* MULTI album colours: accent channel 2 */</script>
 <script>
 'use strict';
 const { H, esc, safe } = Y2K;
@@ -178,31 +202,75 @@ const dur = (s) => { s = Math.round(s); const h = Math.floor(s / 3600), m = Math
 function tabs() {
   const n = safe(() => H.playlistCount, 0), playing = safe(() => H.isPlaying, false) ? safe(() => H.playingPlaylist, -1) : -1;
   let h = '';
-  for (let i = 0; i < n; i++) if (!Y2K.isArtPl(safe(() => H.getPlaylistName(i)))) h += '<div class="tab' + (i === pl ? ' active' : '') + '" data-i="' + i + '" title="' + esc(safe(() => H.getPlaylistName(i))) + '">' + (i === playing ? '<span class="np"></span>' : '') + esc(safe(() => H.getPlaylistName(i))) + '</div>';
+  for (let i = 0; i < n; i++) {
+    const name = safe(() => H.getPlaylistName(i)), arm = closeArm && closeArm.i === i && closeArm.name === name;
+    if (!Y2K.isArtPl(name)) h += '<div class="tab' + (i === pl ? ' active' : '') + (arm ? ' arm' : '') + '" data-i="' + i + '" title="' + esc(name) + '">' + (i === playing ? '<span class="np"></span>' : '') + esc(name) +
+      '<span class="x" title="' + (arm ? 'Not saved: click again to close it (right-click a tab > Save playlist… keeps it)' : 'Close this playlist') + '">' + (arm ? 'CLOSE?' : '✕') + '</span></div>';
+  }
   h += '<div class="tab add" id="newpl" title="New playlist">+</div>';
   $('tabs').innerHTML = h;
   $('tabs').querySelectorAll('.tab[data-i]').forEach((t) => {
     const i = +t.dataset.i;
-    t.onclick = () => { safe(() => { H.activePlaylist = i; }); };
-    t.ondblclick = () => rename(t, i);
+    t.onclick = (e) => { if (e.target.closest('.x')) { e.stopPropagation(); closePl(i); return; } safe(() => { H.activePlaylist = i; }); };
+    t.ondblclick = (e) => { if (!e.target.closest('.x')) rename(t, i); };
     t.oncontextmenu = (e) => { e.preventDefault(); menu(e.clientX, e.clientY, [
       ['Rename', () => rename(t, i)],
-      ['Duplicate', () => safe(() => H.duplicatePlaylist(i, safe(() => H.getPlaylistName(i)) + ' (copy)'))],
+      ['Duplicate', () => safe(() => H.duplicatePlaylist(i, freshName(safe(() => H.getPlaylistName(i)) + ' (copy)')))],
+      ['Save playlist…', () => openShelf(i, true)],
       ['New playlist', newPlaylist], null,
-      ['Delete playlist', () => deletePl(i)],
+      ['Close playlist', () => closePl(i)],
     ]); };
-    t.onauxclick = (e) => { if (e.button === 1) deletePl(i); };
+    t.onauxclick = (e) => { if (e.button === 1) closePl(i); };
   });
   $('newpl').onclick = newPlaylist;
   const act = $('tabs').querySelector('.tab.active'); if (act) act.scrollIntoView({ inline: 'nearest' });
 }
 function deletePl(i) { lastPl = Math.max(0, i - 1); safe(() => H.deletePlaylist(i)); setTimeout(() => load(false), 120); }
-function newPlaylist() { const i = safe(() => H.createPlaylist(H.playlistCount, 'New Playlist'), -1); if (i >= 0) safe(() => { H.activePlaylist = i; }); setTimeout(() => { const t = $('tabs').querySelector('.tab[data-i="' + i + '"]'); if (t) rename(t, i); }, 150); }
+/* Close a playlist (✕ on its tab, middle-click, or the tab menu). One with songs that isn't on the saved shelf (by
+   name) asks first: its tab turns red with CLOSE? for 4 s, and a second click closes it. Library Selection is a
+   scratch list the Media Library refills, so it never asks. */
+let closeArm = null, closeArmT = 0;   // { i, name }
+function closePl(i) {
+  const name = safe(() => H.getPlaylistName(i), ''), count = safe(() => H.getPlaylistItemCount(i), 0);
+  const armed = closeArm && closeArm.i === i && closeArm.name === name;
+  const saved = shelfList.some((r) => r.name.trim().toLowerCase() === name.trim().toLowerCase());
+  clearTimeout(closeArmT); closeArm = null;
+  if (armed || !count || saved || name === 'Library Selection') { deletePl(i); return; }
+  closeArm = { i, name };
+  closeArmT = setTimeout(() => { closeArm = null; tabs(); }, 4000);
+  tabs();
+  toast('“' + name + '” ISN\'T SAVED · CLICK CLOSE? TO CLOSE IT ANYWAY', true);
+}
+function newPlaylist() { const i = safe(() => H.createPlaylist(H.playlistCount, freshName()), -1); if (i >= 0) { setWork(i); safe(() => { H.activePlaylist = i; }); } setTimeout(() => { const t = $('tabs').querySelector('.tab[data-i="' + i + '"]'); if (t) rename(t, i); }, 150); }
+/* A playlist named like a saved one is linked to it (and writes into it), so a new playlist never takes a name that
+   is saved or open already: New Playlist, New Playlist (2), ... */
+function freshName(base = 'New Playlist') {
+  const taken = (s) => safe(() => H.findPlaylist(s), -1) >= 0 || !!savedByName(s);
+  if (!taken(base)) return base;
+  for (let k = 2; ; k++) if (!taken(base + ' (' + k + ')')) return base + ' (' + k + ')';
+}
 function rename(tabEl, i) {
   const old = safe(() => H.getPlaylistName(i));
   tabEl.innerHTML = '<input value="' + esc(old) + '">';
   const inp = tabEl.querySelector('input'); inp.focus(); inp.select();
-  const done = (ok) => { if (ok && inp.value.trim()) safe(() => H.setPlaylistName(i, inp.value.trim())); tabs(); header(); };
+  let finished = false;
+  const done = (ok) => {
+    if (finished) return; finished = true;
+    const v = inp.value.trim(), linked = savedByName(old), other = savedByName(v);
+    if (ok && v && v !== old) {
+      // taking a saved playlist's name would link this one to it and overwrite it on the next change
+      if (other && other !== linked) { toast('“' + v + '” IS A SAVED PLAYLIST\'S NAME · PICK ANOTHER', true); tabs(); header(); return; }
+      if (linked && v.toLowerCase() === 'library selection') { toast('PICK ANOTHER NAME', true); tabs(); header(); return; }
+      const w = workIndex();
+      safe(() => H.setPlaylistName(i, v));
+      if (w === i) setWork(i);
+      if (linked) {   // the saved playlist follows its tab's new name
+        if (Y2K.noSync.delete(old.trim().toLowerCase())) Y2K.noSync.add(v.toLowerCase());
+        linked.name = v; Y2K.savedDb.put(linked).then(refreshShelf);
+      }
+    }
+    tabs(); header();
+  };
   inp.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') done(true); if (e.key === 'Escape') done(false); };
   inp.onblur = () => done(true);
   inp.onclick = (e) => e.stopPropagation();
@@ -335,31 +403,190 @@ $('vp').addEventListener('keydown', (e) => {
 });
 function removeSelected() { safe(() => H.removeSelectedPlaylistItems(pl)); }
 
-/* ------------------------------------------------ context menu */
-let menuEl = null;
+/* ------------------------------------------------ context menu
+   entries: [text, fn] | [text, [entries]] (a submenu, opens on hover) | 'TEXT' (a section label) | [text] (greyed) | null (line) */
+let menuEl = null, subEl = null;
+function buildMenu(entries, isSub) {
+  const el = document.createElement('div'); el.className = 'menu';
+  for (const en of entries) {
+    if (!en) { el.appendChild(document.createElement('hr')); continue; }
+    const d = document.createElement('div');
+    if (typeof en === 'string') { d.className = 'head'; d.textContent = en; el.appendChild(d); continue; }
+    d.textContent = en[0];
+    if (Array.isArray(en[1])) { d.className = 'sub'; d.onmouseenter = d.onclick = () => openSub(d, en[1]); }
+    else if (en[1]) { d.onclick = () => { closeMenu(); en[1](); }; if (!isSub) d.onmouseenter = closeSub; }
+    else d.className = 'off';
+    if (en[2]) d.title = en[2];
+    el.appendChild(d);
+  }
+  document.body.appendChild(el);
+  return el;
+}
 function menu(x, y, entries) {
   closeMenu();
-  menuEl = document.createElement('div'); menuEl.className = 'menu';
-  for (const en of entries) {
-    if (!en) { menuEl.appendChild(document.createElement('hr')); continue; }
-    const d = document.createElement('div'); d.textContent = en[0]; d.onclick = () => { closeMenu(); en[1](); }; menuEl.appendChild(d);
-  }
-  document.body.appendChild(menuEl);
+  menuEl = buildMenu(entries);
   const r = menuEl.getBoundingClientRect();
-  menuEl.style.left = Math.min(x, innerWidth - r.width - 4) + 'px'; menuEl.style.top = Math.min(y, innerHeight - r.height - 4) + 'px';
+  menuEl.style.left = Math.max(4, Math.min(x, innerWidth - r.width - 4)) + 'px'; menuEl.style.top = Math.max(4, Math.min(y, innerHeight - r.height - 4)) + 'px';
 }
-function closeMenu() { if (menuEl) { menuEl.remove(); menuEl = null; } }
-document.addEventListener('mousedown', (e) => { if (menuEl && !menuEl.contains(e.target)) closeMenu(); });
-$('sp').addEventListener('contextmenu', (e) => {
+function openSub(d, entries) {
+  if (d.classList.contains('open') && subEl) return;
+  closeSub(); d.classList.add('open');
+  subEl = buildMenu(entries, true);
+  const a = d.getBoundingClientRect(), r = subEl.getBoundingClientRect();
+  const left = a.right + 2 + r.width <= innerWidth - 4 ? a.right + 2 : Math.max(4, a.left - r.width - 2);   // right of the item, else left
+  subEl.style.left = left + 'px'; subEl.style.top = Math.max(4, Math.min(a.top - 4, innerHeight - r.height - 4)) + 'px';
+}
+function closeSub() { if (subEl) { subEl.remove(); subEl = null; } if (menuEl) menuEl.querySelectorAll('.sub.open').forEach((x) => x.classList.remove('open')); }
+function closeMenu() { closeSub(); if (menuEl) { menuEl.remove(); menuEl = null; } }
+document.addEventListener('mousedown', (e) => { if (menuEl && !menuEl.contains(e.target) && !(subEl && subEl.contains(e.target))) closeMenu(); });
+
+let toastT = 0;
+function toast(text, bad) { const t = $('toast'); t.textContent = text; t.className = 'toast' + (bad ? ' bad' : ''); t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, 2600); }
+
+/* "New Playlist" you're filling: Send to new playlist (or the + tab) makes one and you stay where you are; from then
+   on "Add to “…”" keeps adding to that same playlist. Remembered as { i, name } in 'pl:work'; the index is checked
+   against the name, so deleting or reordering playlists doesn't send songs to the wrong one. */
+let work = safe(() => JSON.parse(localStorage.getItem('pl:work')), null);
+function setWork(i) { work = { i, name: safe(() => H.getPlaylistName(i), '') }; safe(() => localStorage.setItem('pl:work', JSON.stringify(work))); }
+function workIndex() {
+  if (!work) return -1;
+  if (safe(() => H.getPlaylistName(work.i), null) === work.name) return work.i;
+  const j = safe(() => H.findPlaylist(work.name), -1);
+  if (j >= 0) { work.i = j; safe(() => localStorage.setItem('pl:work', JSON.stringify(work))); return j; }
+  work = null; safe(() => localStorage.removeItem('pl:work'));
+  return -1;
+}
+const songWord = (n) => n + (n === 1 ? ' SONG' : ' SONGS');
+function sendToNew(sel) {
+  const n = safe(() => H.createPlaylist(H.playlistCount, freshName()), -1);
+  if (n < 0) return;
+  Y2K.addPaths(n, sel.map((i) => items[i].path));
+  setWork(n);
+  toast(songWord(sel.length) + ' → “' + work.name + '” · right-click to keep adding');
+}
+function addToWork(sel) {
+  const w = workIndex(); if (w < 0) return;
+  Y2K.addPaths(w, sel.map((i) => items[i].path));
+  toast('ADDED ' + songWord(sel.length) + ' → “' + work.name + '”');
+}
+
+/* Add to playlist ▸ : the saved playlists (Y2K's shelf) and, with a Navidrome server, its playlists. A saved playlist
+   gets the songs with their tags (and a foobar2000 playlist of the same name, when one is open, gets them too); a
+   server playlist gets the songs that come from that server. Both lists are read ahead, so the menu opens at once. */
+let shelfList = [], ndPls = [];
+const refreshShelf = () => Y2K.savedDb.list().then((l) => { shelfList = l; }).catch(() => {});
+const refreshNdPls = () => { const c = Y2K.ndCfg(); if (!c) { ndPls = []; return; } Y2K.ndPlaylists().then((l) => { ndPls = l.filter((p) => !p.owner || p.owner === c.user); }).catch(() => {}); };
+async function addToSaved(rec, sel) {
+  try {
+    // its tab is open (and writing back): the songs go in there and reach the saved one through the sync;
+    // otherwise straight into the saved one
+    const fi = safe(() => H.findPlaylist(rec.name), -1);
+    if (fi >= 0 && !Y2K.noSync.has(rec.name.trim().toLowerCase())) Y2K.addPaths(fi, sel.map((i) => items[i].path));
+    else {
+      await Y2K.appendSaved(rec.id, shelfTracksOf(sel.map((i) => items[i])));
+      if (fi >= 0) Y2K.addPaths(fi, sel.map((i) => items[i].path));
+    }
+    toast('ADDED ' + songWord(sel.length) + ' → “' + rec.name + '”');
+  } catch (e) { toast(String(e.message || e).toUpperCase(), true); }
+  refreshShelf();
+}
+
+/* ------------------------------------------------ saved playlists <-> their tabs
+   A playlist named like a saved one writes every change (added, removed, moved songs) into it, a moment after the
+   last change (the theme adds songs one by one). Y2K.syncHold: being filled by the theme; Y2K.noSync: opened with
+   songs missing, so it must not shrink the saved copy. */
+const lcName = (s) => String(s || '').trim().toLowerCase();
+const savedByName = (s) => shelfList.find((r) => lcName(r.name) === lcName(s));
+const syncTimers = new Map();
+function scheduleSync(k) {
+  const name = safe(() => H.getPlaylistName(k), '');
+  if (!name || lcName(name) === 'library selection' || Y2K.isArtPl(name)) return;
+  const key = lcName(name);
+  clearTimeout(syncTimers.get(key));
+  syncTimers.set(key, setTimeout(() => { syncTimers.delete(key); syncLinked(k, name); }, 900));
+}
+async function syncLinked(k, name) {
+  const key = lcName(name);
+  if (Y2K.syncHold.has(key) || Y2K.noSync.has(key)) return;
+  if (safe(() => H.getPlaylistName(k), '') !== name) k = safe(() => H.findPlaylist(name), -1);
+  if (k < 0) return;
+  const rec = (await Y2K.savedDb.list().catch(() => [])).find((r) => lcName(r.name) === key);
+  if (!rec) return;
+  const tracks = shelfTracks(k);
+  if (tracks.length === rec.tracks.length && tracks.every((t, j) => t.p === rec.tracks[j].p && (t.s || '') === (rec.tracks[j].s || ''))) return;
+  rec.tracks = tracks; rec.n = tracks.length; rec.secs = tracks.reduce((s, t) => s + (t.ls || 0), 0); rec.updated = Date.now();
+  await Y2K.savedDb.put(rec);
+  refreshShelf();
+}
+/** Fill playlist n with paths after emptying it (clearing is asynchronous too); held from syncing throughout. */
+function refill(n, paths, then) {
+  const key = lcName(safe(() => H.getPlaylistName(n), ''));
+  Y2K.syncHold.add(key);
+  safe(() => H.clearPlaylist(n));
+  const t0 = Date.now();
+  const wait = () => {
+    if (safe(() => H.getPlaylistItemCount(n), 0) && Date.now() - t0 < 4000) { setTimeout(wait, 10); return; }
+    Y2K.fillPlaylist(n, paths, then);
+  };
+  wait();
+}
+/** After a save: the saved playlist gets its own tab (the one saved from, renamed, or a new one) to keep editing in. */
+function linkTab(rec, replaced, fromTab) {
+  const paths = rec.tracks.map((t) => t.p);
+  let n = safe(() => H.findPlaylist(rec.name), -1);
+  if (n >= 0 && n === fromTab) return;
+  if (n < 0 && fromTab >= 0) {   // Save playlist… under a new name: that tab takes the name
+    Y2K.syncHold.add(lcName(rec.name));
+    const w = workIndex();
+    safe(() => H.setPlaylistName(fromTab, rec.name));
+    if (w === fromTab) setWork(fromTab);
+    setTimeout(() => Y2K.syncHold.delete(lcName(rec.name)), 1200);
+    return;
+  }
+  if (n >= 0) { refill(n, paths); return; }   // REPLACE of a saved playlist whose tab is open: it gets the new songs
+  n = safe(() => H.createPlaylist(H.playlistCount, rec.name), -1);
+  if (n < 0) return;
+  Y2K.fillPlaylist(n, paths);
+  setWork(n);
+  toast('“' + rec.name + '” SAVED · ITS TAB SAVES YOUR CHANGES · RIGHT-CLICK SONGS TO ADD MORE');
+}
+async function addToNd(p, sel) {
+  const ids = sel.map((i) => Y2K.ndSongId(items[i].path)).filter(Boolean), skipped = sel.length - ids.length;
+  if (!ids.length) { toast('NONE OF THESE SONGS ARE ON YOUR NAVIDROME SERVER', true); return; }
+  try {
+    await Y2K.ndAddToPlaylist(p.id, ids);
+    toast('ADDED ' + songWord(ids.length) + ' → NAVIDROME “' + p.name + '”' + (skipped ? ' · ' + skipped + ' NOT ON THE SERVER' : ''));
+  } catch (e) { toast('NAVIDROME: ' + String(e.name === 'TypeError' || e.name === 'AbortError' ? 'can\'t reach the server' : e.message || e).toUpperCase(), true); }
+  refreshNdPls();
+}
+function playlistTargets(sel) {
+  const out = [['＋ New saved playlist…', () => Y2K.showSavedPlaylists({ name: '', tracks: shelfTracksOf(sel.map((i) => items[i])), onSaved: (rec, rep) => { refreshShelf().then(() => linkTab(rec, rep, -1)); } }, true),
+    'Name a new playlist on the saved shelf and put these songs in it; it opens as a tab that saves your changes']];
+  if (shelfList.length) out.push(null, 'SAVED PLAYLISTS', ...shelfList.map((r) => [r.name, () => addToSaved(r, sel), r.n + ' tracks on the theme\'s shelf']));
+  if (Y2K.ndCfg() && ndPls.length) {
+    const fromServer = sel.some((i) => Y2K.ndSongId(items[i].path));
+    out.push(null, 'NAVIDROME', ...ndPls.map((p) => fromServer ? [p.name, () => addToNd(p, sel), (p.songCount || 0) + ' songs on your Navidrome server']
+      : [p.name, null, 'Only songs that play from your Navidrome server can go into its playlists']));
+  }
+  return out;
+}
+
+$('sp').addEventListener('contextmenu', async (e) => {
   e.preventDefault();
   const rowEl = e.target.closest('.row, .grp'); if (!rowEl) return;
   const sel = selectedIndices(); if (!sel.length) return;
   const it = items[focus] || items[sel[0]];
+  await refreshShelf();
+  refreshNdPls();
+  const w = workIndex();
   menu(e.clientX, e.clientY, [
     ['▶  Play', () => playItem(sel[0])],
     ['Add to playback queue', () => sel.forEach((i) => safe(() => H.addPlaylistItemToPlaybackQueue(pl, i)))],
     null,
-    ['Send to new playlist', () => { const paths = sel.map((i) => items[i].path); const n = safe(() => H.createPlaylist(H.playlistCount, 'New Playlist'), -1); if (n >= 0) { Y2K.addPaths(n, paths); safe(() => { H.activePlaylist = n; }); } }],
+    ...(w >= 0 && w !== pl ? [['Add to “' + work.name + '”', () => addToWork(sel), 'Keep adding to the playlist you started']] : []),
+    ['Send to new playlist', () => sendToNew(sel), 'Start a new playlist with these songs (you stay here to keep picking)'],
+    ['Add to playlist', playlistTargets(sel)],
+    null,
     ['Remove from playlist', removeSelected],
     ['Crop (keep only selection)', () => safe(() => H.removeUnselectedPlaylistItems(pl))],
     null,
@@ -393,12 +620,39 @@ $('q').addEventListener('input', Y2K.debounce(() => { filter = $('q').value; bui
 $('q').addEventListener('keydown', (e) => { if (e.key === 'Escape') { $('q').value = ''; filter = ''; buildRows(); render(); } e.stopPropagation(); });
 $('plname').ondblclick = () => { const t = $('tabs').querySelector('.tab.active'); if (t) rename(t, pl); };
 
+/* SAVED: the theme's saved-playlist shelf (Y2K.showSavedPlaylists). Saving happens from the right-click menus:
+   "Add to playlist ▸ New saved playlist…" (the picked songs) and the tab menu's "Save playlist…" (the whole playlist). */
+function shelfTracks(i) {
+  let list = items;
+  if (i !== pl) {
+    const l = safe(() => H.getPlaylistItemHandles(i), 0);
+    list = [];
+    if (l) {
+      list = safe(() => JSON.parse(H.formatMetaDBHandleList(l, SCRIPT)), []).map((s) => { const v = s.split(SEPC); return { aa: v[0], album: v[1], year: v[2], title: v[3], artist: v[4], len: v[8], lens: +v[9] || 0, path: v[12], sub: v[13], dir: v[14] }; });
+      safe(() => H.releaseMetaDBHandleList(l));
+    }
+  }
+  return shelfTracksOf(list);
+}
+const shelfTracksOf = (list) => list.map((x) => ({ p: x.path, s: x.sub, t: x.title, a: x.artist, aa: x.aa, al: x.album, y: x.year, l: x.len, ls: x.lens, d: x.dir }));
+function openShelf(i, offerSave) {
+  Y2K.showSavedPlaylists(offerSave && i >= 0 ? { name: safe(() => H.getPlaylistName(i), ''), tracks: shelfTracks(i), onSaved: (rec, rep) => { refreshShelf().then(() => linkTab(rec, rep, i)); } } : null, offerSave);
+}
+refreshShelf(); refreshNdPls();
+$('savedpl').onclick = () => openShelf(pl, false);
+
 const reload = Y2K.debounce(() => load(true), 150);
 const reloadAll = Y2K.debounce(() => load(false), 60);
 fb2k.on('playlist:activated', reloadAll);
 ['playlist:itemsAdded', 'playlist:itemsRemoved', 'playlist:itemsReordered', 'playlist:itemsReplaced', 'playlist:itemsModified', 'playlist:itemsModifiedFromPlayback']
   .forEach((ev) => fb2k.on(ev, (p) => { if (!p || p.playlist === undefined || p.playlist === pl) reload(); }));
 ['playlist:created', 'playlist:removed', 'playlist:renamed', 'playlist:reordered'].forEach((ev) => fb2k.on(ev, Y2K.debounce(() => { if (safe(() => H.activePlaylist, -1) !== pl) load(false); else { header(); } }, 80)));
+// any playlist's songs changing may need writing back to its saved playlist
+['playlist:itemsAdded', 'playlist:itemsRemoved', 'playlist:itemsReordered', 'playlist:itemsReplaced']
+  .forEach((ev) => fb2k.on(ev, (p) => {
+    if (p && p.playlist !== undefined) scheduleSync(p.playlist);
+    else for (let k = 0, n = safe(() => H.playlistCount, 0); k < n; k++) if (savedByName(safe(() => H.getPlaylistName(k), ''))) scheduleSync(k);
+  }));
 fb2k.on('playlist:selectionChanged', (p) => { if (!p || p.playlist === pl) { selCache.clear(); render(); } });
 fb2k.on('playlist:focusChanged', (p) => { if (p && p.playlist === pl && p.to !== focus) { focus = p.to; render(); } });
 fb2k.on('playlist:ensureVisible', (p) => { if (p && p.playlist === pl) ensureVisible(p.item); });

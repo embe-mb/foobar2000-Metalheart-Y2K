@@ -1,5 +1,42 @@
 # Changelog
 
+## v1.5 — 2026-10-24
+
+> **Updating from v1.4.1:** press **DOWNLOAD & INSTALL** on the notice at the top of the deck, or go to **CUSTOMIZE DECK › SCREEN › PERFORMANCE › Theme version**. To install by hand, close foobar2000, extract `Metalheart-Y2K-theme.zip` and run **`Install Metalheart Y2K.cmd`**. Your deck settings, caches and library aren't touched.
+
+### New
+
+**Navidrome playlists in the Media Library**
+
+<img width="380" alt="PLAYLISTS in the Media Library" src="https://raw.githubusercontent.com/embe-mb/foobar2000-Metalheart-Y2K/main/docs/v1.5/library-playlists.png" /> <img width="380" alt="An open Navidrome playlist" src="https://raw.githubusercontent.com/embe-mb/foobar2000-Metalheart-Y2K/main/docs/v1.5/library-playlist-open.png" />
+
+- While a Navidrome server is connected, a **PLAYLISTS** button sits next to the Media Library's search box. It shows your playlists on the server, and public ones other users share, as cards with their covers. The search box then filters the playlists by name.
+- Open a playlist to see its songs. **Play**, **+ Add**, **New playlist** (a foobar2000 playlist with the same name), double-click and the right-click menu work as they do for albums. **Navidrome** opens the playlist in Navidrome's web player.
+- Click a song's album to open it, when that album is in your Media Library or on the server.
+- The list is read again each time you open PLAYLISTS, so playlists you change in Navidrome are up to date.
+
+**Saved playlists**
+
+<img width="880" alt="SAVED PLAYLISTS window" src="https://raw.githubusercontent.com/embe-mb/foobar2000-Metalheart-Y2K/main/docs/v1.5/saved-playlists.png" />
+
+- Keep a playlist on the theme's own shelf from the right-click menus. Right-click songs in Library Selection and choose **Add to playlist ▸ New saved playlist…**, or right-click a playlist tab and choose **Save playlist…** for the whole playlist. Name it and press Enter. Saving under a name that's already on the shelf replaces that one; the button says **REPLACE** when it will.
+- **SAVED** opens the shelf in a Metalheart window: your saved playlists on the left with their covers, the one you pick on the right with its tracks.
+- **Play** loads it into Library Selection and starts it, and double-clicking a track plays from there. **+ Add** appends it to the current playlist, and **Open as playlist** brings it back as a foobar2000 playlist of its own. **Rename** and **Delete** do what they say; Delete asks you to click again to be sure.
+- **Building a playlist from Library Selection:** right-click songs and choose **Send to new playlist** to start one. You stay in Library Selection to keep picking, and the next songs go in with **Add to “New Playlist”** (it follows the playlist if you rename it). Before, every *Send to new playlist* made yet another playlist and switched you to it.
+- **Add to playlist ▸** in the same menu lists your saved playlists. The songs are added to the saved one, and to the foobar2000 playlist of the same name if it's open. With a Navidrome server connected, your server playlists are listed too, and songs that play from the server go straight into them on the server. Your own files can't go into a server playlist; they're shown greyed out.
+- **A saved playlist saves itself.** Saving opens it as a playlist tab of the same name. Add songs to that tab, remove them or move them around, and the saved playlist follows by itself; there's no need to save again. *Open as playlist* on the shelf brings the tab back later. Renaming the tab renames the saved playlist, and the other way round. To keep the two apart, a new playlist never takes a saved playlist's name: you get *New Playlist (2)* instead, and the Media Library's **New playlist** works the same way. If some of a saved playlist's songs can't be found when you open it (a drive unplugged, the server offline), the shelf says so, and that tab leaves the saved copy alone so nothing goes missing.
+- **EXPORT…** in the SAVED window writes the playlist to an `.m3u8` file wherever you choose, so you have a real file that other players can open too. From then on, the file is rewritten whenever the playlist changes; the window shows where it is, and **FOLDER** opens it. **EXPORT AGAIN…** moves it somewhere else. Exported Navidrome songs are stream addresses that include your sign-in token, the same as in foobar2000's own playlists.
+- **Close a playlist** with the **✕** on its tab (or middle-click the tab, or **Close playlist** in its right-click menu). If it has songs and isn't on the saved shelf, the tab turns red and says **CLOSE?** first, so you don't lose it by accident; click again to close it. Library Selection closes straight away, since the Media Library refills it.
+<img width="880" alt="Add to playlist submenu in Library Selection" src="https://raw.githubusercontent.com/embe-mb/foobar2000-Metalheart-Y2K/main/docs/v1.5/selection-add-to-playlist.png" />
+
+<img width="880" alt="A playlist tab asking CLOSE?" src="https://raw.githubusercontent.com/embe-mb/foobar2000-Metalheart-Y2K/main/docs/v1.5/selection-tab-close.png" />
+
+- Saved playlists keep their order and any song you put in twice. They stay on the shelf even if you clear or delete the foobar2000 playlist they came from, and theme updates keep them.
+
+### Changed
+
+- **The theme no longer uses foo_navidrome.** The **NAVIDROME** button in the control pod now opens the theme's own Navidrome settings in the Media Library. Before, it opened foo_navidrome's browser, which needed its own separate setup. The installer doesn't offer foo_navidrome any more. If you already have it, it stays installed and still works from foobar2000's menus, but you can remove it.
+
 ## v1.4.1 — 2026-10-23
 
 > **Hotfix.** Update from the notice at the top of the deck, or **CUSTOMIZE DECK › SCREEN › PERFORMANCE › Theme version**.

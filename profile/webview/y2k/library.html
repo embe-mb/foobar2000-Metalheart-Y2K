@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>Metalheart Library</title>
-<link rel="stylesheet" href="common.css?v=23">
+<link rel="stylesheet" href="common.css?v=29">
 <style>
   body { display: flex; flex-direction: column; background: #121921; }
   .top { flex: none; padding: 3px 4px 4px; display: flex; flex-direction: column; gap: 5px; }
@@ -12,10 +12,13 @@
   .capsule .pill { height: 16px; font-size: 8.5px; text-shadow: none; }
   .bar { display: flex; gap: 4px; align-items: center; padding: 0 2px; }
   .views { display: flex; gap: 3px; }
-  .views span { height: 19px; padding: 0 9px; border-radius: 10px; cursor: pointer; display: inline-flex; align-items: center; font: 700 9px/1 var(--ui); letter-spacing: .06em; color: #b8c3cf;
+  .views span, .plbtn { height: 19px; padding: 0 9px; border-radius: 10px; cursor: pointer; display: inline-flex; align-items: center; font: 700 9px/1 var(--ui); letter-spacing: .06em; color: #b8c3cf;
     background: linear-gradient(180deg, #2f3943, #1a2129); border: 1px solid #070a0d; box-shadow: inset 0 1px 0 rgba(255,255,255,.12); }
-  .views span:hover { color: #fff; }
-  .views span.on { color: rgb(var(--c0d1f02)); background: linear-gradient(180deg, rgba(255,255,255,.55), rgba(255,255,255,.08) 50%, transparent 51%), linear-gradient(180deg, var(--lime-1), var(--lime-3)); border-color: var(--lime-4); }
+  .views span:hover, .plbtn:hover { color: #fff; }
+  /* PLAYLISTS (the Navidrome server's playlists) sits right of the search box while a server is connected */
+  .plbtn { flex: none; }
+  .plbtn[hidden] { display: none; }
+  .views span.on, .plbtn.on { color: rgb(var(--c0d1f02)); background: linear-gradient(180deg, rgba(255,255,255,.55), rgba(255,255,255,.08) 50%, transparent 51%), linear-gradient(180deg, var(--lime-1), var(--lime-3)); border-color: var(--lime-4); }
   /* albums tab: sort modes */
   .sorts { display: flex; gap: 3px; flex-wrap: wrap; align-items: center; padding: 0 2px; }
   .sorts[hidden] { display: none; }
@@ -128,13 +131,14 @@
   <div class="bar">
     <div class="views" id="views"><span data-v="artists">ARTISTS</span><span data-v="albums">ALBUMS</span><span data-v="genres">GENRES</span><span data-v="years">YEARS</span></div>
     <input class="search" id="q" placeholder="Search…" spellcheck="false">
+    <span class="plbtn" id="plBtn" hidden title="Your playlists on the Navidrome server">PLAYLISTS</span>
   </div>
   <div class="sorts" id="sorts" hidden><span data-s="all">ALL</span><span data-s="year">YEAR</span><span data-s="random">RANDOM</span><span data-s="added">RECENTLY ADDED</span><span data-s="label">RECORD LABEL</span><span class="opt" id="sopt"></span></div>
   <div class="crumb" id="crumb"></div>
 </div>
 <div class="main"><div class="ndsheet" id="ndSheet" hidden></div><div class="jump" id="rail"></div><div class="body" id="body"><div class="empty loading"><b>SCANNING…</b>Reading your media library</div></div></div>
 
-<script src="common.js?v=23"></script><script>Y2K.scopeAccent(document.body, 1); /* MULTI album colours: accent channel 1 */</script>
+<script src="common.js?v=29"></script><script>Y2K.scopeAccent(document.body, 1); /* MULTI album colours: accent channel 1 */</script>
 <script>
 'use strict';
 const { H, esc, safe } = Y2K;
@@ -217,6 +221,7 @@ function load() {
 /** albums = the Media Library's + the Navidrome server's (unless switched off, and without the ones you have here). */
 function merge() {
   if (rendered) savePos();
+  localIdx = null;
   const have = new Set(local.map((a) => sameAlbum(a.aa, a.album)));
   const extra = ndState === 'ok' && ndOpt.show ? ndList.filter((a) => ndOpt.dupes || !have.has(sameAlbum(a.aa, a.album))) : [];
   albums = local.concat(extra);
@@ -235,6 +240,7 @@ function setMeta(shown = (albums.length - local.length)) {
     : '<span class="pill blue clickable" id="ndPill" title="' + esc(ndList.length.toLocaleString() + ' albums on ' + c.url + (ndOpt.show ? ', ' + shown.toLocaleString() + ' shown here' + (ndOpt.dupes ? '' : ' (the ones you have on this computer are left out)') : ', hidden from the Media Library') + '. Click for the server settings.') + '">NAVIDROME ' + (ndOpt.show ? shown.toLocaleString() : 'OFF') + '</span>';
   $('meta').innerHTML = (trackCount ? '<span class="pill dark">' + local.length.toLocaleString() + ' ALBUMS</span><span class="pill dark">' + trackCount.toLocaleString() + ' TRACKS</span>' : '') + nd;
   $('ndPill').onclick = () => ndSheet();
+  $('plBtn').hidden = !c;
 }
 const sortName = (s) => (s || '').replace(/^(the|a|an)\s+/i, '').toLowerCase();
 // symbols sort first, then digits, then letters (ICU order); accents fold onto their letter
@@ -264,6 +270,7 @@ function ndAlbum(x) {
 async function ndLoad() {
   const c = Y2K.ndCfg(), my = ++ndSeq;
   ndSeen = safe(() => localStorage.getItem(Y2K.ND_KEY), '') || '';
+  plSeq++; plList = null; plState = 'off'; plSongs.clear();   // another server (or none): its playlists are read again
   if (!c) { ndList = []; ndState = 'off'; merge(); return; }
   ndState = 'loading'; setMeta();
   if (!albums.length && loaded) draw();
@@ -282,8 +289,7 @@ async function ndLoad() {
 function tracksOf(a) {
   if (a.tracks) return Promise.resolve(a.tracks);
   if (!a.loading) a.loading = Y2K.ndSongs(a.nd).then((songs) => {
-    a.tracks = songs.map((s) => ({ title: s.title || '', artist: s.artist || '', disc: s.discNumber ? String(s.discNumber) : '', trk: s.track ? String(s.track) : '',
-      secs: s.duration || 0, len: Math.floor((s.duration || 0) / 60) + ':' + String((s.duration || 0) % 60).padStart(2, '0'), path: Y2K.ndStream(s.id) }));
+    a.tracks = songs.map(ndTrack);
     a.n = a.tracks.length;
     a.tlc = a.tracks.map((t) => (t.title + ' ' + t.artist).toLowerCase()).join('\n');
     a.alc = [a.aa, ...new Set(a.tracks.map((t) => t.artist))].join('\n').toLowerCase();
@@ -292,8 +298,144 @@ function tracksOf(a) {
   }).finally(() => { a.loading = null; });
   return a.loading;
 }
+/** A server song as a track row; it plays from the server's stream URL. */
+const ndTrack = (s) => ({ title: s.title || '', artist: s.artist || '', disc: s.discNumber ? String(s.discNumber) : '', trk: s.track ? String(s.track) : '',
+  secs: s.duration || 0, len: Math.floor((s.duration || 0) / 60) + ':' + String((s.duration || 0) % 60).padStart(2, '0'), path: Y2K.ndStream(s.id),
+  album: s.album || '', albumId: s.albumId || '', aa: s.displayAlbumArtist || s.albumArtist || s.artist || '' });
+const ndWhy = (e) => e.name === 'TypeError' || e.name === 'AbortError' ? 'can\'t reach the server' : String(e.message || e);
 const withPaths = (a, fn) => tracksOf(a).then((ts) => fn(ts.map((t) => t.path))).catch((e) => console.warn('[library] Navidrome album failed:', e));
-const ndWeb = (a) => { const c = Y2K.ndCfg(); if (c) Y2K.openUrl(c.url + '/app/#/album/' + encodeURIComponent(a.nd) + '/show'); };
+const ndWebPage = (page) => { const c = Y2K.ndCfg(); if (c) Y2K.openUrl(c.url + '/app/#/' + page + '/show'); };
+const ndWeb = (a) => ndWebPage('album/' + encodeURIComponent(a.nd));
+
+/* ------------------------------------------------ Navidrome playlists
+   PLAYLISTS (right of the search box, shown while a server is connected) lists the server's playlists as cards;
+   one opens like an album (Play / + Add / New playlist / Navidrome), the search box filters them by name.
+   The list is read again each time PLAYLISTS is opened; a playlist's songs again whenever it changed on the server. */
+let plList = null, plState = 'off', plErr = '', plSeq = 0;   // plState: off | loading | ok | error
+const plSongs = new Map(), plFetch = new Map();              // playlist id -> { changed, tracks } / the request under way
+let localIdx = null;                                          // sameAlbum(artist, album) -> key of one of your own albums
+const onPlaylists = () => !!stack[0] && stack[0].type === 'playlists';
+async function plLoad() {
+  const my = ++plSeq, had = !!plList;
+  plState = 'loading';
+  try {
+    const l = await Y2K.ndPlaylists();
+    if (my !== plSeq) return;
+    plList = l; plState = 'ok'; plErr = '';
+  } catch (e) {
+    if (my !== plSeq) return;
+    console.warn('[library] Navidrome playlists:', e);
+    plState = 'error'; plErr = ndWhy(e);
+  }
+  if (!onPlaylists() || (stack.length > 1 && top_().type === 'album')) return;
+  if (had) savePos();   // the old list was on screen: keep the place in it
+  draw(); restorePos();
+}
+function plTracks(p) {
+  const have = plSongs.get(p.id);
+  if (have && have.changed === p.changed) return Promise.resolve(have.tracks);
+  if (!plFetch.has(p.id)) {
+    plFetch.set(p.id, Y2K.ndPlaylist(p.id).then((r) => {
+      const tracks = (r.entry || []).map(ndTrack);
+      plSongs.set(p.id, { changed: p.changed, tracks });
+      return tracks;
+    }).finally(() => plFetch.delete(p.id)));
+  }
+  return plFetch.get(p.id);
+}
+const plPaths = (p, fn) => plTracks(p).then((ts) => fn(ts.map((t) => t.path))).catch((e) => console.warn('[library] Navidrome playlist failed:', e));
+const plById = (id) => (plList || []).find((p) => p.id === id);
+/** The album a playlist track comes from, when it's in the Media Library (server album, or your own copy of it). */
+function albumOf(t) {
+  if (t.albumId && byKey.has('nd:' + t.albumId)) return 'nd:' + t.albumId;
+  if (!t.album) return '';
+  if (!localIdx) { localIdx = new Map(); for (const a of local) localIdx.set(sameAlbum(a.aa, a.album), a.key); }
+  return localIdx.get(sameAlbum(t.aa, t.album)) || localIdx.get(sameAlbum(t.artist, t.album)) || '';
+}
+function drawPlaylists(top) {
+  const body = $('body');
+  if (!Y2K.ndCfg()) { stack = []; saveState(); return draw(); }   // disconnected meanwhile
+  if (!plList) {
+    if (plState === 'error') {
+      body.innerHTML = '<div class="empty"><b>SERVER ERROR</b>' + esc('Navidrome: ' + plErr) + '<br><span class="btn" id="plRetry">TRY AGAIN</span></div>';
+      $('plRetry').onclick = plLoad;
+    } else {
+      if (plState !== 'loading') plLoad();
+      body.innerHTML = '<div class="empty loading"><b>LOADING…</b>Reading the playlists on your Navidrome server</div>';
+    }
+    return;
+  }
+  if (top.type === 'playlist') {
+    const p = plById(top.value);
+    if (p) return renderPlaylist(p);
+    stack.pop(); saveState(); return draw();   // deleted on the server
+  }
+  const q = query.toLowerCase().trim();
+  renderPlaylists(q ? plList.filter((p) => (p.name + ' ' + (p.comment || '')).toLowerCase().includes(q)) : plList);
+}
+function renderPlaylists(list) {
+  const body = $('body'), me = (Y2K.ndCfg() || {}).user;
+  if (!list.length) {
+    body.innerHTML = query ? '<div class="empty"><b>NOTHING FOUND</b>No playlist has that in its name</div>'
+      : '<div class="empty"><b>NO PLAYLISTS</b>Playlists you make in Navidrome, and public ones others share, show up here</div>';
+    return;
+  }
+  let h = '<div class="grid">';
+  for (const p of list) {
+    const sub = p.comment || (p.owner && p.owner !== me ? 'by ' + p.owner : p.public ? 'Public' : 'Private');
+    h += '<div class="card" data-a="' + esc('pl:' + p.id) + '" data-p="' + esc(p.id) + '"><div class="cv" data-cover="' + esc(p.coverArt || '') + '"><div class="ph">' + esc((p.name || '?').charAt(0).toUpperCase()) + '</div><span class="src">PLAYLIST</span></div>' +
+      '<div class="tt">' + esc(p.name) + '</div><div class="aa">' + esc(sub) + '</div><div class="yy">' + (p.songCount || 0) + ' TRK · ' + Y2K.fmtTime(p.duration) + '</div></div>';
+  }
+  body.innerHTML = h + '</div>';
+  const io = new IntersectionObserver((ents) => ents.forEach((en) => {
+    if (!en.isIntersecting) return;
+    io.unobserve(en.target);
+    ndArt(en.target, en.target.dataset.cover, 200);
+  }), { root: body, rootMargin: '300px' });
+  body.querySelectorAll('.cv[data-cover]').forEach((el) => io.observe(el));
+  body.querySelectorAll('.card').forEach((el) => {
+    const p = plById(el.dataset.p);
+    el.onclick = () => go(() => stack.push({ type: 'playlist', value: p.id }));
+    el.ondblclick = (e) => { e.stopPropagation(); plPaths(p, (x) => Y2K.loadPaths(x)); if (top_().type === 'playlist') back(); };
+    el.oncontextmenu = (e) => { e.preventDefault(); playlistMenu(e.clientX, e.clientY, p); };
+  });
+}
+function renderPlaylist(p) {
+  const body = $('body'), got = plSongs.get(p.id);
+  if (!got || got.changed !== p.changed) {
+    body.innerHTML = '<div class="empty loading"><b>LOADING…</b>Fetching the playlist from your Navidrome server</div>';
+    const still = () => { const t = top_(); return t && t.type === 'playlist' && t.value === p.id; };
+    plTracks(p).then(() => { if (still()) { renderPlaylist(p); restorePos(); } })
+      .catch((e) => { if (still()) body.innerHTML = '<div class="empty"><b>SERVER ERROR</b>' + esc('Navidrome: ' + ndWhy(e)) + '</div>'; });
+    return;
+  }
+  const ts = got.tracks, me = (Y2K.ndCfg() || {}).user, secs = ts.reduce((n, t) => n + t.secs, 0);
+  let tr = '';
+  ts.forEach((t, i) => {
+    const ak = albumOf(t);
+    tr += '<div class="tr" data-a="' + i + '" data-i="' + i + '"><span class="n">' + (i + 1) + '</span><span>' + esc(t.title) + ' <span style="color:#8e9aa8">— ' +
+      (t.artist ? '<span class="alink" data-artist="' + esc(t.artist) + '" title="Search the library for this artist">' + esc(t.artist) + '</span>' : '') +
+      (t.album ? ' · ' + (ak ? '<span class="alink" data-album="' + esc(ak) + '" title="Open this album">' + esc(t.album) + '</span>' : esc(t.album)) : '') +
+      '</span></span><span class="n">' + esc(t.len) + '</span></div>';
+  });
+  body.innerHTML = '<div class="detail"><div class="head chrome screws"><div class="big" id="big"></div><div style="min-width:0">' +
+    '<div class="t">' + esc(p.name) + '</div><div class="a">' + esc(p.owner && p.owner !== me ? 'Playlist by ' + p.owner : 'Playlist') + '</div>' +
+    '<div class="m">' + [esc(p.comment || ''), ts.length + (ts.length === 1 ? ' track' : ' tracks'), Math.round(secs / 60) + ' min'].filter(Boolean).join(' · ') + '</div>' +
+    '<div class="btns"><span class="btn lime" id="bplay">▶ Play</span><span class="btn" id="badd">+ Add</span><span class="btn" id="bnew">New playlist</span><span class="btn" id="bdir" title="Open this playlist in Navidrome\'s web player">Navidrome</span></div>' +
+    '</div></div><div class="tracks">' + (tr || '<div class="empty"><b>EMPTY</b>This playlist has no songs yet</div>') + '</div></div>';
+  const u = Y2K.ndCover(p.coverArt, 300); if (u) $('big').style.backgroundImage = 'url("' + u + '")';
+  const paths = ts.map((t) => t.path);
+  $('bplay').onclick = () => Y2K.playPaths(paths);
+  $('badd').onclick = () => addToActive(paths);
+  $('bnew').onclick = () => newPlaylist(p.name, paths);
+  $('bdir').onclick = () => ndWebPage('playlist/' + encodeURIComponent(p.id));
+  body.querySelectorAll('.tr').forEach((el) => { el.ondblclick = (e) => { if (!e.target.closest('.alink')) Y2K.loadPaths(paths, ts[+el.dataset.i].path); }; el.title = 'Double-click to load into Library Selection (double-click it there to play)'; });
+  body.querySelectorAll('.alink').forEach((el) => { el.onclick = (e) => { e.stopPropagation(); if (el.dataset.album) go(() => stack.push({ type: 'album', value: el.dataset.album })); else searchArtist(el.dataset.artist); }; });
+}
+function playlistMenu(x, y, p) {
+  showMenu(x, y, [['▶  Play', () => plPaths(p, (x) => Y2K.playPaths(x))], ['Add to current playlist', () => plPaths(p, addToActive)],
+    ['Send to new playlist', () => plPaths(p, (x) => newPlaylist(p.name, x))], ['Open in Navidrome', () => ndWebPage('playlist/' + encodeURIComponent(p.id))]]);
+}
 
 /** The server settings, dropped down over the albums (the NAVIDROME pill opens and closes it). */
 function ndSheet(open) {
@@ -387,6 +529,8 @@ function render() {
       : sort === 'label' ? (labelCat ? '# BY CATALOGUE NO.' : '▲ BY RELEASE DATE') : '';
     $('sopt').title = sort === 'year' ? 'Switch between earliest and latest first' : sort === 'label' ? 'Order each label\'s releases by release date or by catalogue number' : 'Shuffle the albums again';
   }
+  $('plBtn').classList.toggle('on', onPlaylists());
+  $('q').placeholder = onPlaylists() ? 'Search playlists…' : 'Search…';
   if (document.activeElement !== $('q')) $('q').value = top && top.type === 'search' ? top.value : query;
   rendered = true;
   draw();
@@ -394,8 +538,9 @@ function render() {
   railSync();
 }
 function draw() {
-  const body = $('body');
+  const body = $('body'), top = top_();
   $('rail').innerHTML = '';
+  if (top && (top.type === 'playlists' || top.type === 'playlist')) { crumb(); return drawPlaylists(top); }
   if (!albums.length) {
     body.innerHTML = !loaded || ndState === 'loading' ? '<div class="empty loading"><b>SCANNING…</b>' + (loaded ? 'Reading the albums on your Navidrome server' : 'Reading your media library') + '</div>'
       : '<div class="empty"><b>NO MUSIC YET</b>Add your music folders, or connect a Navidrome server, and the albums appear here' +
@@ -403,7 +548,6 @@ function draw() {
     if ($('addmusic')) { $('addmusic').onclick = () => Y2K.runCommand('Configure'); $('addnd').onclick = () => ndSheet(true); }
     $('crumb').innerHTML = ''; return;
   }
-  const top = top_();
   crumb();
   if (top && top.type === 'album') {
     const a = byKey.get(top.value);
@@ -459,8 +603,9 @@ function artistMatcher(name) {
 function crumb() {
   const top = top_();
   if (!top) { $('crumb').innerHTML = query ? '<span class="where">Results for “' + esc(query) + '”</span>' : ''; return; }
-  const label = { artist: 'ARTIST', genre: 'GENRE', year: 'YEAR', album: 'ALBUM', search: 'ARTIST SEARCH', label: 'RECORD LABEL' }[top.type];
-  const name = top.type === 'album' ? (byKey.get(top.value) || {}).album : top.value;
+  const label = { artist: 'ARTIST', genre: 'GENRE', year: 'YEAR', album: 'ALBUM', search: 'ARTIST SEARCH', label: 'RECORD LABEL', playlists: 'NAVIDROME', playlist: 'PLAYLIST' }[top.type];
+  const name = top.type === 'album' ? (byKey.get(top.value) || {}).album : top.type === 'playlists' ? (query ? 'Playlists matching “' + query + '”' : 'Playlists')
+    : top.type === 'playlist' ? (plById(top.value) || {}).name : top.value;
   $('crumb').innerHTML = '<span class="back" id="back">◂ BACK</span><span class="where"><span style="color:var(--blue-1);font:400 8px var(--pixel);letter-spacing:.1em">' + label + '</span>&nbsp; ' + esc(name || '') + '</span>';
   $('back').onclick = back;
 }
@@ -643,16 +788,20 @@ function addToActive(paths) {
   if (pl < 0) pl = Y2K.playlistIndexByName('Default', true);
   Y2K.addPaths(pl, paths);
 }
-function newPlaylist(name, paths) { const n = safe(() => H.createPlaylist(H.playlistCount, name), -1); if (n >= 0) { Y2K.addPaths(n, paths); safe(() => { H.activePlaylist = n; }); } }
+// never under a saved playlist's name (it would link to it and overwrite it): "Album (2)" then
+async function newPlaylist(name, paths) { name = await Y2K.freePlaylistName(name); const n = safe(() => H.createPlaylist(H.playlistCount, name), -1); if (n >= 0) { Y2K.addPaths(n, paths); safe(() => { H.activePlaylist = n; }); } }
 
 let menuEl = null;
 function albumMenu(x, y, a) {
+  showMenu(x, y, [['▶  Play', () => withPaths(a, (p) => Y2K.playPaths(p))], ['Add to current playlist', () => withPaths(a, addToActive)], ['Send to new playlist', () => withPaths(a, (p) => newPlaylist(a.album, p))],
+    ['More by ' + a.aa, () => searchArtist(a.aa)], ...(a.label ? [['More on ' + a.label, () => openLabel(a.label)]] : []),
+    a.nd ? ['Open in Navidrome', () => ndWeb(a)] : ['Open folder', () => Y2K.openFile(Y2K.toFwd(a.dir))]]);
+}
+/** items: [[text, fn], ...] */
+function showMenu(x, y, items) {
   if (menuEl) menuEl.remove();
   menuEl = document.createElement('div'); menuEl.className = 'menu';
-  [['▶  Play', () => withPaths(a, (p) => Y2K.playPaths(p))], ['Add to current playlist', () => withPaths(a, addToActive)], ['Send to new playlist', () => withPaths(a, (p) => newPlaylist(a.album, p))],
-    ['More by ' + a.aa, () => searchArtist(a.aa)], ...(a.label ? [['More on ' + a.label, () => openLabel(a.label)]] : []),
-    a.nd ? ['Open in Navidrome', () => ndWeb(a)] : ['Open folder', () => Y2K.openFile(Y2K.toFwd(a.dir))]]
-    .forEach(([t, f]) => { const d = document.createElement('div'); d.textContent = t; d.onclick = () => { menuEl.remove(); menuEl = null; f(); }; menuEl.appendChild(d); });
+  items.forEach(([t, f]) => { const d = document.createElement('div'); d.textContent = t; d.onclick = () => { menuEl.remove(); menuEl = null; f(); }; menuEl.appendChild(d); });
   document.body.appendChild(menuEl);
   const r = menuEl.getBoundingClientRect();
   menuEl.style.left = Math.min(x, innerWidth - r.width - 4) + 'px'; menuEl.style.top = Math.min(y, innerHeight - r.height - 4) + 'px';
@@ -670,7 +819,15 @@ $('sopt').onclick = () => go(() => {
   else if (sort === 'label') labelCat = !labelCat;
   else if (sort === 'random') seed = newSeed();
 });
-$('q').addEventListener('input', Y2K.debounce(() => go(() => { query = $('q').value; stack = stack.filter((s) => s.type !== 'album' && s.type !== 'search'); }), 200));
+// typing goes back to the list being searched: the playlists (inside PLAYLISTS), else the albums
+$('q').addEventListener('input', Y2K.debounce(() => go(() => { query = $('q').value; stack = onPlaylists() ? [stack[0]] : stack.filter((s) => s.type !== 'album' && s.type !== 'search'); }), 200));
+// PLAYLISTS opens / closes the server's playlists (read again on every open; the last list shows meanwhile)
+$('plBtn').onclick = () => {
+  const open = !onPlaylists();
+  if (open && !plList && plState === 'error') plState = 'off';   // failed last time: try again
+  go(() => { stack = open ? [{ type: 'playlists' }] : []; query = ''; });
+  if (open && plList) plLoad();
+};
 $('q').addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   const top = top_();
@@ -694,6 +851,19 @@ function checkLibSearch() {
 }
 window.addEventListener('storage', (e) => { if (e.key === 'y2k:libSearch') checkLibSearch(); });
 setInterval(checkLibSearch, 600);
+
+/* The deck's NAVIDROME button opens the server settings here: deck.html writes 'y2k:ndOpen' = its time, we answer
+   in 'y2k:ndOpenAck' (no answer tells the deck that this panel isn't in the layout). */
+let lastNdOpen = +(safe(() => localStorage.getItem('y2k:ndOpen'), 0) || 0);
+function checkNdOpen() {
+  const t = +(safe(() => localStorage.getItem('y2k:ndOpen'), 0) || 0);
+  if (t <= lastNdOpen) return;
+  lastNdOpen = t;
+  safe(() => localStorage.setItem('y2k:ndOpenAck', String(t)));
+  if (Date.now() - t < 5000) ndSheet(true);
+}
+window.addEventListener('storage', (e) => { if (e.key === 'y2k:ndOpen') checkNdOpen(); });
+setInterval(checkNdOpen, 500);
 
 const reload = Y2K.debounce(load, 2500);
 ['library:itemsAdded', 'library:itemsRemoved', 'library:itemsModified'].forEach((ev) => fb2k.on(ev, reload));

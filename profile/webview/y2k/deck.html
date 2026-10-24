@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>Metalheart Deck</title>
-<link rel="stylesheet" href="common.css?v=23">
+<link rel="stylesheet" href="common.css?v=29">
 <style>
   body { display: flex; flex-direction: column; padding: 6px 8px 8px; gap: 6px; }
 
@@ -644,7 +644,7 @@
       <span class="chip" data-cmd="Preferences" title="foobar2000 preferences">PREFS</span>
     </div>
     <div class="row">
-      <span class="chip" data-cmd="Open Navidrome Browser" title="Browse a Navidrome / Subsonic server">NAVIDROME</span>
+      <span class="chip" id="bNd" title="Navidrome / Subsonic server settings (in the Media Library)">NAVIDROME</span>
       <span class="chip" data-cmd="Search" title="Search the media library">SEARCH</span>
       <span class="chip" data-cmd="Configure" title="Choose the music folders of your Media Library">+ MUSIC</span>
     </div>
@@ -677,7 +677,7 @@
   </div>
 </div>
 
-<script src="common.js?v=23"></script>
+<script src="common.js?v=29"></script>
 <script>
 /* ---------------- fitting the deck to its window ----------------
    The deck is laid out for a strip about 420 px high. In a narrow window (e.g. on a vertical monitor) the cover
@@ -1370,6 +1370,17 @@ $('bOrder').oncontextmenu = (e) => { e.preventDefault(); safe(() => { H.playback
 function showSAC() { $('bSAC').style.filter = safe(() => H.stopAfterCurrent, false) ? 'hue-rotate(-120deg) brightness(1.2)' : ''; }
 $('bSAC').onclick = () => { safe(() => H.toggleStopAfterCurrent()); showSAC(); };
 document.querySelectorAll('[data-cmd]').forEach((el) => { el.onclick = () => Y2K.runCommand(el.dataset.cmd); });
+/* NAVIDROME opens the server settings in the Media Library panel: it watches 'y2k:ndOpen' and answers in
+   'y2k:ndOpenAck'; no answer = that panel isn't in the layout (the classic one has the native Album List). */
+$('bNd').onclick = () => {
+  const t = Date.now();
+  safe(() => localStorage.setItem('y2k:ndOpen', String(t)));
+  setTimeout(() => {
+    if (+(safe(() => localStorage.getItem('y2k:ndOpenAck'), 0) || 0) >= t) return;
+    alert('The Navidrome settings live in the Media Library panel, which this layout doesn\'t show.\n\n' +
+      'Use NAVIDROME + in the Artist Bio tab\'s Discography box instead, or switch to the Metalheart layout.');
+  }, 1500);
+};
 $('artist').onclick = () => { const id = cur && (Y2K.firstOf(cur.mb_artist) || Y2K.firstOf(cur.mb_albumartist)); if (id) Y2K.openUrl('https://musicbrainz.org/artist/' + id); };
 $('album').onclick = () => { if (cur && cur.mb_release) Y2K.openUrl('https://musicbrainz.org/release/' + cur.mb_release); };
 
