@@ -781,7 +781,7 @@ const Y2K = (() => {
   /* --------------------------------------------------------------- theme updates
      VERSION is this copy of the theme: bump it for every GitHub release and tag the release v<VERSION>.
      checkUpdate asks GitHub for the latest release (cached an hour unless forced). */
-  const VERSION = '1.3';
+  const VERSION = '1.4';
   const REPO = 'embe-mb/foobar2000-Metalheart-Y2K';
   const verNum = (s) => String(s || '').replace(/^v/i, '').split('.').map((n) => parseInt(n, 10) || 0);
   function isNewer(a, b) {
@@ -810,12 +810,121 @@ const Y2K = (() => {
     return a.country || (a.area && a.area['iso-3166-1-codes'] && a.area['iso-3166-1-codes'][0]) || '';
   }
 
-  /* --------------------------------------------------------------- shell / commands */
-  const profileDir = toFwd(safe(() => H.profilePath));
-  const exePath = profileDir.replace(/\/[^/]+\/?$/, '') + '/foobar2000.exe';
+  /* --------------------------------------------------------------- shell / commands
+     Main-menu commands go through foobar2000.exe /command:"Name" (the running foobar2000 gets them). A portable
+     install keeps foobar2000.exe next to its profile folder; a standard install keeps the profile in
+     %APPDATA%\foobar2000-v2 and the program elsewhere, so the installer leaves the program's path in fb2k-exe.txt
+     and the usual install folders come after that. */
+  const profileDir = toFwd(safe(() => H.profilePath)).replace(/\/$/, '');
+  const exePath = (() => {
+    const has = (dir) => !!dir && listDir(dir).some((f) => !f.isDirectory && f.name.toLowerCase() === 'foobar2000.exe');
+    const saved = toFwd(readText(profileDir + '/webview/y2k/fb2k-exe.txt')).trim().replace(/\/foobar2000\.exe$/i, '');
+    const dir = [saved, profileDir.replace(/\/[^/]+$/, ''), 'C:/Program Files/foobar2000', 'C:/Program Files (x86)/foobar2000'].find(has);
+    return dir ? dir + '/foobar2000.exe' : '';
+  })();
   const openUrl = (url) => safe(() => H.execute(url, '', '', 'open', 1));
   const openFile = (pathFwd) => safe(() => H.execute(pathFwd.split('/').join(BS), '', '', 'open', 1));
-  const runCommand = (name) => safe(() => H.execute(exePath.split('/').join(BS), '/command:"' + name + '"', '', 'open', 1));
+  /** Runs foobar2000.exe with these arguments; says so once when foobar2000.exe can't be found. */
+  let exeWarned = false;
+  function runFb2k(args) {
+    if (exePath) return safe(() => { H.execute(exePath.split('/').join(BS), args, '', 'open', 1); return true; }, false);
+    if (!exeWarned) {
+      exeWarned = true;
+      alert('METALHEART // Y2K can\'t find foobar2000.exe, so this button can\'t reach foobar2000.\n\n' +
+        'Run "Install Metalheart Y2K.cmd" again and pick your foobar2000 folder: the theme remembers it from then on.');
+    }
+    return false;
+  }
+  const runCommand = (name) => runFb2k('/command:"' + name + '"');
+
+  /* --------------------------------------------------------------- Navidrome / Subsonic
+     One server for every panel (Media Library, Artist Bio): its address, the user and a salted token (Subsonic token
+     auth, md5(password + salt); the password itself is never kept) in localStorage 'y2k:navidrome'.
+     Tracks go into playlists as the server's own stream URLs (format=raw = the original file, so seeking works).
+     foobar2000 plays and tags those by itself; foo_navidrome's navidrome:// paths would only play once that
+     component has the same server in its own preferences. */
+  const ND_KEY = 'y2k:navidrome';
+  const ndCfg = () => safe(() => JSON.parse(localStorage.getItem(ND_KEY)), null) || null;
+  const ndAuth = (c) => 'u=' + encodeURIComponent(c.user) + '&t=' + c.token + '&s=' + c.salt + '&v=1.16.1&c=metalheart';
+  async function nd(ep, q, c = ndCfg(), ms = 8000) {
+    if (!c) throw new Error('Navidrome is not set up');
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), ms);
+    try {
+      const res = await fetch(c.url + '/rest/' + ep + '.view?' + ndAuth(c) + '&f=json' + (q ? '&' + q : ''), { signal: ctl.signal, cache: 'no-store' });
+      const r = (await res.json())['subsonic-response'];
+      if (!r || r.status !== 'ok') throw new Error(r && r.error && r.error.message || 'unexpected reply');
+      return r;
+    } finally { clearTimeout(timer); }
+  }
+  const ndCover = (id, size, c = ndCfg()) => c && id ? c.url + '/rest/getCoverArt.view?' + ndAuth(c) + '&id=' + encodeURIComponent(id) + (size ? '&size=' + size : '') : '';
+  const ndStream = (id, c = ndCfg()) => c.url + '/rest/stream.view?id=' + encodeURIComponent(id) + '&' + ndAuth(c) + '&format=raw';
+  /** An album's songs in disc / track order. */
+  async function ndSongs(albumId) {
+    const r = await nd('getAlbum', 'id=' + encodeURIComponent(albumId));
+    return ((r.album || {}).song || []).slice().sort((x, y) => (x.discNumber || 1) - (y.discNumber || 1) || (x.track || 0) - (y.track || 0));
+  }
+  const ndPaths = async (albumId) => (await ndSongs(albumId)).map((s) => ndStream(s.id));
+  /** Every album on the server (getAlbumList2 pages of 500); onPage(albumsSoFar) after each page. */
+  async function ndAllAlbums(onPage) {
+    const all = [];
+    for (let off = 0; off < 200000; off += 500) {
+      const r = await nd('getAlbumList2', 'type=alphabeticalByName&size=500&offset=' + off, undefined, 20000);
+      const page = (r.albumList2 || {}).album || [];
+      all.push(...page);
+      if (onPage) onPage(all);
+      if (page.length < 500) break;
+    }
+    return all;
+  }
+  /** Checks the server with these details and saves them; throws an Error with a short message to show. */
+  async function ndConnect(typed, user, pass) {
+    typed = String(typed || '').trim().replace(/\/+$/, '').replace(/\/(app|rest)(\/.*)?$/i, '').replace(/\/#.*$/, '');
+    user = String(user || '').trim();
+    const old = ndCfg();
+    if (!typed || !user) throw new Error('Enter the server and user');
+    let c;
+    if (pass) { const salt = [...crypto.getRandomValues(new Uint8Array(8))].map((b) => b.toString(16).padStart(2, '0')).join(''); c = { user, salt, token: md5(pass + salt) }; }
+    else if (old && old.user === user) c = { user, salt: old.salt, token: old.token };
+    else throw new Error('Enter the password');
+    // no http:// or https:// typed: try plain http (home servers) and then https
+    const urls = /^https?:\/\//i.test(typed) ? [typed] : ['http://' + typed, 'https://' + typed];
+    let err = null;
+    for (const url of urls) {
+      try { await nd('ping', '', { ...c, url }); c.url = url; err = null; break; }
+      catch (e) { if (!err || err.name === 'TypeError' || err.name === 'AbortError') err = e; }
+    }
+    if (err) throw new Error(err.name === 'TypeError' || err.name === 'AbortError' ? 'Can\'t reach the server' : String(err.message || err));
+    localStorage.setItem(ND_KEY, JSON.stringify(c));
+    return c;
+  }
+  const ndForget = () => safe(() => localStorage.removeItem(ND_KEY));
+
+  /** MD5 (hex) of a UTF-8 string: Subsonic's token is md5(password + salt). */
+  function md5(str) {
+    const b = new TextEncoder().encode(str), n = ((b.length + 8) >>> 6) + 1, w = new Int32Array(n * 16);
+    for (let i = 0; i < b.length; i++) w[i >> 2] |= b[i] << ((i % 4) * 8);
+    w[b.length >> 2] |= 0x80 << ((b.length % 4) * 8);
+    w[n * 16 - 2] = b.length * 8;
+    const S = [7, 12, 17, 22, 5, 9, 14, 20, 4, 11, 16, 23, 6, 10, 15, 21];
+    const K = Array.from({ length: 64 }, (_, i) => Math.floor(Math.abs(Math.sin(i + 1)) * 2 ** 32) | 0);
+    let a0 = 0x67452301, b0 = 0xefcdab89 | 0, c0 = 0x98badcfe | 0, d0 = 0x10325476;
+    for (let o = 0; o < w.length; o += 16) {
+      let A = a0, B = b0, C = c0, D = d0;
+      for (let i = 0; i < 64; i++) {
+        let F, g;
+        if (i < 16) { F = (B & C) | (~B & D); g = i; }
+        else if (i < 32) { F = (D & B) | (~D & C); g = (5 * i + 1) % 16; }
+        else if (i < 48) { F = B ^ C ^ D; g = (3 * i + 5) % 16; }
+        else { F = C ^ (B | ~D); g = (7 * i) % 16; }
+        F = (F + A + K[i] + w[o + g]) | 0;
+        A = D; D = C; C = B;
+        const s = S[(i >> 4) * 4 + (i % 4)];
+        B = (B + ((F << s) | (F >>> (32 - s)))) | 0;
+      }
+      a0 = (a0 + A) | 0; b0 = (b0 + B) | 0; c0 = (c0 + C) | 0; d0 = (d0 + D) | 0;
+    }
+    return [a0, b0, c0, d0].map((x) => [0, 8, 16, 24].map((s) => ((x >>> s) & 255).toString(16).padStart(2, '0')).join('')).join('');
+  }
 
   /* --------------------------------------------------------------- synced lyrics (LRC)
      parseLRC(text) -> [{ t, s, w }] sorted by time. Plain LRC: "[01:02.50]words". Enhanced / word-synced LRC (A2,
@@ -1279,7 +1388,8 @@ const Y2K = (() => {
     LOOK_CHROME, LOOK_CAPS, setLook, applyLook, get look() { return look; },
     thumb, embeddedArt, isArtPl, findDirArtFile, idb, onRipLog, showRipLog, closeRipLog, ripLogText, countryCode, mediaLabel, addPaths, playPaths, loadPaths, playlistIndexByName, toFwd, SEP,
     H, BS, esc, log, safe, getTrack, listDir, readText, readImage, resolveArt, findRipLog, parseRipLog,
-    countryName, flagHTML, flagFile, barcodeSVG, mb, getJSON, store, artistCountry, openUrl, openFile, runCommand, VERSION, checkUpdate,
+    countryName, flagHTML, flagFile, barcodeSVG, mb, getJSON, store, artistCountry, openUrl, openFile, runCommand, runFb2k, VERSION, checkUpdate,
+    ND_KEY, ndCfg, nd, ndCover, ndStream, ndSongs, ndPaths, ndAllAlbums, ndConnect, ndForget,
     fmtTime, qualityOf, firstOf, clean, debounce, onTrackContextChange, trackKey, profileDir, exePath, DAY, parseLRC, lyricWords,
   };
 })();

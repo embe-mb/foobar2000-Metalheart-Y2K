@@ -85,9 +85,13 @@
      "Enable submission". Every track you play is then logged to your profile.
 
   3. Navidrome / Subsonic server (optional)
-     File > Preferences > Tools > Navidrome — enter server URL, user, password,
-     press "Test connection". Open the server browser with the NAVIDROME
-     button in the control pod (or File > Open Navidrome Browser).
+     Click + NAVIDROME at the top of the Media Library and enter the server's
+     address (the one you open Navidrome at in a browser, e.g.
+     192.168.1.10:4533), your user and password. The server's albums then show
+     up in the Media Library (NAVIDROME badge) and play straight from the
+     server; the Artist Bio panel uses the same server. foo_navidrome's own
+     browser (NAVIDROME button in the control pod) is set up separately in
+     File > Preferences > Tools > Navidrome.
 
 
 ---------------------------------------------------------------------
@@ -224,7 +228,7 @@
                Wikipedia biography, official/Bandcamp/Discogs/... links and a
                full discography with Cover Art Archive covers. Click an album
                to play it from your Media Library (LIBRARY badge) or your
-               Navidrome server (NAVIDROME badge — sign in with NAVIDROME +);
+               Navidrome server (NAVIDROME badge; the Media Library's server);
                otherwise, or with Ctrl+click, it opens on MusicBrainz.
     TAGS       Every common tag, technical info, ReplayGain, file details
                and play stats. Click a value to copy it; right-click to open

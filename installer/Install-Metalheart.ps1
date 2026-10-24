@@ -246,6 +246,9 @@ $bInstall.Add_Click({
       Write-Log "  -> $to"
     }
     $dest = Join-Path $prof 'webview\y2k'
+    # the panels run foobar2000.exe /command:"..." for their menu buttons; a standard install keeps the profile in
+    # %APPDATA%, away from the program, so tell them where foobar2000.exe is (UTF-8 without BOM)
+    [IO.File]::WriteAllText((Join-Path $dest 'fb2k-exe.txt'), (Resolve-Path $exe).Path)
 
     # The layout can only be imported once Columns UI is the running interface, so start foobar2000 and wait for it
     Write-Log 'Starting foobar2000...'

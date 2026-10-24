@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>Metalheart Library</title>
-<link rel="stylesheet" href="common.css?v=19">
+<link rel="stylesheet" href="common.css?v=22">
 <style>
   body { display: flex; flex-direction: column; background: #121921; }
   .top { flex: none; padding: 3px 4px 4px; display: flex; flex-direction: column; gap: 5px; }
@@ -100,6 +100,26 @@
   .menu { position: fixed; z-index: 50; min-width: 180px; padding: 4px; border-radius: 8px; background: linear-gradient(180deg, #2a343f, #161d25); border: 1px solid #000; box-shadow: 0 8px 22px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.12); }
   .menu div { padding: 5px 12px; border-radius: 5px; font: 12px var(--ui); color: #dbe4ee; cursor: pointer; white-space: nowrap; }
   .menu div:hover { background: linear-gradient(180deg, var(--sel-0), var(--sel-1)); color: #fff; }
+  /* Navidrome: the server's albums carry a badge; the server settings drop down over the panel */
+  .card .cv .src { position: absolute; left: 4px; bottom: 4px; z-index: 2; height: 13px; padding: 0 5px; border-radius: 7px; font: 400 6.5px/13px var(--pixel); letter-spacing: .06em;
+    color: #fff; text-shadow: 0 1px 0 rgba(0,0,0,.5); background: linear-gradient(180deg, var(--blue-1), var(--blue-3)); box-shadow: 0 1px 3px rgba(0,0,0,.7); }
+  .capsule .pill.clickable { cursor: pointer; }
+  .main { position: relative; }
+  .ndsheet { position: absolute; left: 6px; right: 6px; top: 2px; z-index: 40; padding: 10px 12px 12px; border-radius: 8px; display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; align-items: center;
+    background: linear-gradient(180deg, #27313b, #141a21); border: 1px solid #000; box-shadow: 0 10px 26px rgba(0,0,0,.75), inset 0 1px 0 rgba(255,255,255,.1); }
+  .ndsheet[hidden] { display: none; }
+  .ndsheet .hd { grid-column: 1 / -1; font: 400 8px/1.4 var(--pixel); letter-spacing: .12em; color: var(--lime-2); text-shadow: 0 0 6px var(--lime-glow); }
+  .ndsheet > label:not(.chk) { font: 400 8px/1 var(--pixel); letter-spacing: .08em; color: var(--text-dim); text-transform: uppercase; }
+  .ndsheet input[type=text], .ndsheet input[type=password] { height: 21px; min-width: 0; border-radius: 10px; border: 1px solid var(--blue-5); padding: 0 8px; outline: none; font: 11px var(--ui); color: #dfe7ef;
+    background: #0b1016; box-shadow: inset 0 1px 3px rgba(0,0,0,.8); user-select: text; }
+  .ndsheet input:focus { border-color: var(--lime-3); box-shadow: inset 0 1px 3px rgba(0,0,0,.8), 0 0 6px var(--lime-glow); }
+  .ndsheet .full { grid-column: 1 / -1; }
+  .ndsheet .chk { display: flex; align-items: center; gap: 7px; font: 11px var(--ui); color: #c8d2dc; cursor: pointer; }
+  .ndsheet .chk input { margin: 0; accent-color: var(--lime-2); }
+  .ndsheet .btns { margin-top: 2px; }
+  .ndsheet .note { font: 10.5px/1.45 var(--ui); color: #8e9aa8; }
+  .ndmsg { font: 400 8px/1.6 var(--pixel); letter-spacing: .06em; color: var(--text-dim); min-height: 13px; }
+  .ndmsg.ok { color: var(--lime-1); } .ndmsg.bad { color: #ff8a7a; }
 </style>
 </head>
 <body>
@@ -112,9 +132,9 @@
   <div class="sorts" id="sorts" hidden><span data-s="all">ALL</span><span data-s="year">YEAR</span><span data-s="random">RANDOM</span><span data-s="added">RECENTLY ADDED</span><span data-s="label">RECORD LABEL</span><span class="opt" id="sopt"></span></div>
   <div class="crumb" id="crumb"></div>
 </div>
-<div class="main"><div class="jump" id="rail"></div><div class="body" id="body"><div class="empty loading"><b>SCANNING…</b>Reading your media library</div></div></div>
+<div class="main"><div class="ndsheet" id="ndSheet" hidden></div><div class="jump" id="rail"></div><div class="body" id="body"><div class="empty loading"><b>SCANNING…</b>Reading your media library</div></div></div>
 
-<script src="common.js?v=19"></script><script>Y2K.scopeAccent(document.body, 1); /* MULTI album colours: accent channel 1 */</script>
+<script src="common.js?v=22"></script><script>Y2K.scopeAccent(document.body, 1); /* MULTI album colours: accent channel 1 */</script>
 <script>
 'use strict';
 const { H, esc, safe } = Y2K;
@@ -131,6 +151,7 @@ const F = ['$if2(%album artist%,%artist%)', '%album%', "$year($if3($meta(origina
 const SCRIPT = F.map((x) => '[' + x + ']').join('$char(30)');
 
 let albums = [], byKey = new Map(), trackCount = 0;
+let local = [], loaded = false;   // the Media Library's own albums; albums = these + the Navidrome server's
 /* Everything the user picks is remembered across Back clicks and restarts:
    'lib:state' = tab, album sort, year direction, shuffle seed, drill-down stack, search;
    'lib:pos'   = scroll position per screen, kept as the first visible item (+ offset) so it
@@ -151,7 +172,6 @@ const storePos = Y2K.debounce(() => safe(() => localStorage.setItem('lib:pos', J
 
 /* ------------------------------------------------ data */
 function load() {
-  if (rendered) savePos();
   const enabled = safe(() => H.isLibraryEnabled, true);
   const l = enabled ? safe(() => H.getLibraryItems(), 0) : 0;
   let raw = [];
@@ -191,10 +211,30 @@ function load() {
     a.alc = [a.aa, ...new Set(a.tracks.map((t) => t.artist))].join('\n').toLowerCase();   // artist search
     a.sn = sortName(a.album);
   }
+  local = albums; loaded = true;
+  merge();
+}
+/** albums = the Media Library's + the Navidrome server's (unless switched off, and without the ones you have here). */
+function merge() {
+  if (rendered) savePos();
+  const have = new Set(local.map((a) => sameAlbum(a.aa, a.album)));
+  const extra = ndState === 'ok' && ndOpt.show ? ndList.filter((a) => ndOpt.dupes || !have.has(sameAlbum(a.aa, a.album))) : [];
+  albums = local.concat(extra);
+  byKey = new Map(albums.map((a) => [a.key, a]));
   // base order (artist, then year): used inside an artist / genre / year and for search results
   albums.sort((x, y) => byName(x.aa, y.aa) || (x.year || '9999').localeCompare(y.year || '9999') || COL.compare(x.album, y.album));
-  $('meta').innerHTML = trackCount ? '<span class="pill dark">' + albums.length.toLocaleString() + ' ALBUMS</span><span class="pill dark">' + trackCount.toLocaleString() + ' TRACKS</span>' : '';
+  setMeta(extra.length);
   render();
+}
+const sameAlbum = (aa, album) => (aa + '|' + album).normalize('NFKD').toLowerCase().replace(/[^\p{L}\p{N}|]+/gu, '');
+function setMeta(shown = (albums.length - local.length)) {
+  const c = Y2K.ndCfg();
+  const nd = !c ? '<span class="pill dark clickable" id="ndPill" title="Connect a Navidrome / Subsonic server: its albums show up here next to yours">+ NAVIDROME</span>'
+    : ndState === 'loading' ? '<span class="pill blue clickable" id="ndPill" title="Reading the albums on ' + esc(c.url) + '">NAVIDROME …</span>'
+    : ndState === 'error' ? '<span class="pill amber clickable" id="ndPill" title="' + esc('Navidrome (' + c.url + '): ' + ndErr + '. Click to check the server settings.') + '">NAVIDROME !</span>'
+    : '<span class="pill blue clickable" id="ndPill" title="' + esc(ndList.length.toLocaleString() + ' albums on ' + c.url + (ndOpt.show ? ', ' + shown.toLocaleString() + ' shown here' + (ndOpt.dupes ? '' : ' (the ones you have on this computer are left out)') : ', hidden from the Media Library') + '. Click for the server settings.') + '">NAVIDROME ' + (ndOpt.show ? shown.toLocaleString() : 'OFF') + '</span>';
+  $('meta').innerHTML = (trackCount ? '<span class="pill dark">' + local.length.toLocaleString() + ' ALBUMS</span><span class="pill dark">' + trackCount.toLocaleString() + ' TRACKS</span>' : '') + nd;
+  $('ndPill').onclick = () => ndSheet();
 }
 const sortName = (s) => (s || '').replace(/^(the|a|an)\s+/i, '').toLowerCase();
 // symbols sort first, then digits, then letters (ICU order); accents fold onto their letter
@@ -205,6 +245,96 @@ const byName = (x, y) => { const lx = letterOf(x), ly = letterOf(y); return (lx 
 const LETTERS = ['#', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'];
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 function hash(s) { let h = seed >>> 0; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 2654435761) >>> 0; return (h ^ (h >>> 15)) >>> 0; }
+
+/* ------------------------------------------------ Navidrome / Subsonic server
+   Its albums join the Media Library's (blue NAVIDROME badge). The album list comes in one go (getAlbumList2);
+   an album's tracks only when it is opened or played. They play straight from the server (Y2K.ndStream URLs),
+   so nothing has to be set up in foobar2000 itself. The server is shared with the Artist Bio panel ('y2k:navidrome');
+   what to show is 'lib:nd' = { show, dupes }. */
+let ndOpt = Object.assign({ show: true, dupes: false }, safe(() => JSON.parse(localStorage.getItem('lib:nd')), null) || {});
+let ndList = [], ndState = 'off', ndErr = '', ndSeq = 0;   // ndState: off | loading | ok | error
+const saveNdOpt = () => safe(() => localStorage.setItem('lib:nd', JSON.stringify(ndOpt)));
+function ndAlbum(x) {
+  const aa = x.artist || x.displayArtist || 'Unknown artist', album = x.name || x.title || '(no album)';
+  return { key: 'nd:' + x.id, nd: x.id, cover: x.coverArt || '', aa, album, year: x.year ? String(x.year) : '', genre: x.genre || '',
+    label: Y2K.clean(((x.recordLabels || [])[0] || {}).name || ''), dir: '', tracks: null, n: x.songCount || 0, secs: x.duration || 0,
+    media: '', ryear: '', codec: '', country: '', cat: '', added: (x.created || '').slice(0, 19).replace('T', ' '), multi: false, edition: '',
+    lc: (aa + ' ' + album).toLowerCase(), tlc: '', alc: aa.toLowerCase(), sn: sortName(album) };
+}
+async function ndLoad() {
+  const c = Y2K.ndCfg(), my = ++ndSeq;
+  ndSeen = safe(() => localStorage.getItem(Y2K.ND_KEY), '') || '';
+  if (!c) { ndList = []; ndState = 'off'; merge(); return; }
+  ndState = 'loading'; setMeta();
+  if (!albums.length && loaded) draw();
+  try {
+    const raw = await Y2K.ndAllAlbums();
+    if (my !== ndSeq) return;
+    ndList = raw.map(ndAlbum); ndState = 'ok'; ndErr = '';
+  } catch (e) {
+    if (my !== ndSeq) return;
+    console.warn('[library] Navidrome:', e);
+    ndList = []; ndState = 'error'; ndErr = e.name === 'TypeError' || e.name === 'AbortError' ? 'can\'t reach the server' : String(e.message || e);
+  }
+  merge();
+}
+/** An album's tracks: the Media Library's right away, a server album's fetched once (then kept). */
+function tracksOf(a) {
+  if (a.tracks) return Promise.resolve(a.tracks);
+  if (!a.loading) a.loading = Y2K.ndSongs(a.nd).then((songs) => {
+    a.tracks = songs.map((s) => ({ title: s.title || '', artist: s.artist || '', disc: s.discNumber ? String(s.discNumber) : '', trk: s.track ? String(s.track) : '',
+      secs: s.duration || 0, len: Math.floor((s.duration || 0) / 60) + ':' + String((s.duration || 0) % 60).padStart(2, '0'), path: Y2K.ndStream(s.id) }));
+    a.n = a.tracks.length;
+    a.tlc = a.tracks.map((t) => (t.title + ' ' + t.artist).toLowerCase()).join('\n');
+    a.alc = [a.aa, ...new Set(a.tracks.map((t) => t.artist))].join('\n').toLowerCase();
+    if (songs[0] && songs[0].suffix) a.codec = songs[0].suffix.toUpperCase();
+    return a.tracks;
+  }).finally(() => { a.loading = null; });
+  return a.loading;
+}
+const withPaths = (a, fn) => tracksOf(a).then((ts) => fn(ts.map((t) => t.path))).catch((e) => console.warn('[library] Navidrome album failed:', e));
+const ndWeb = (a) => { const c = Y2K.ndCfg(); if (c) Y2K.openUrl(c.url + '/app/#/album/' + encodeURIComponent(a.nd) + '/show'); };
+
+/** The server settings, dropped down over the albums (the NAVIDROME pill opens and closes it). */
+function ndSheet(open) {
+  const el = $('ndSheet');
+  if (open === false || (open === undefined && !el.hidden)) { el.hidden = true; return; }
+  const c = Y2K.ndCfg();
+  const status = !c ? '' : ndState === 'ok' ? 'CONNECTED · ' + ndList.length.toLocaleString() + ' ALBUMS ON THE SERVER' : ndState === 'error' ? ('PROBLEM: ' + ndErr).toUpperCase() : ndState === 'loading' ? 'READING THE SERVER…' : '';
+  el.innerHTML = '<div class="hd">NAVIDROME / SUBSONIC SERVER</div>' +
+    '<label for="ndUrl">Server</label><input id="ndUrl" type="text" spellcheck="false" placeholder="192.168.1.10:4533" value="' + esc(c ? c.url : '') + '">' +
+    '<label for="ndUser">User</label><input id="ndUser" type="text" spellcheck="false" value="' + esc(c ? c.user : '') + '">' +
+    '<label for="ndPass">Password</label><input id="ndPass" type="password" placeholder="' + (c ? '(saved, type to change)' : '') + '">' +
+    '<label class="chk full"><input type="checkbox" id="ndShow"' + (ndOpt.show ? ' checked' : '') + '>Show the server\'s albums in the Media Library</label>' +
+    '<label class="chk full"><input type="checkbox" id="ndDupes"' + (ndOpt.dupes ? ' checked' : '') + '>Also show server albums I already have on this computer</label>' +
+    '<div class="full btns"><span class="btn lime" id="ndSave">' + (c ? 'Save' : 'Connect') + '</span>' +
+    (c ? '<span class="btn" id="ndRefresh">Refresh albums</span><span class="btn" id="ndForget">Disconnect</span>' : '') + '<span class="btn" id="ndClose">Close</span></div>' +
+    '<div class="full ndmsg' + (ndState === 'error' ? ' bad' : ndState === 'ok' ? ' ok' : '') + '" id="ndMsg">' + esc(status) + '</div>' +
+    '<div class="full note">The address you open Navidrome at in a browser, e.g. <b>192.168.1.10:4533</b>. Server albums play straight from the server; ' +
+    'nothing has to be set up in foobar2000. Only a salted token is saved, never the password. The Artist Bio panel uses the same server.</div>';
+  el.hidden = false;
+  const msg = (t, cls) => { $('ndMsg').textContent = t; $('ndMsg').className = 'full ndmsg ' + (cls || ''); };
+  const opts = () => { ndOpt = { show: $('ndShow').checked, dupes: $('ndDupes').checked }; saveNdOpt(); merge(); };
+  $('ndShow').onchange = opts; $('ndDupes').onchange = opts;
+  $('ndSave').onclick = async () => {
+    const cur = Y2K.ndCfg(), typed = $('ndUrl').value.trim().replace(/\/+$/, '');
+    if (cur && !$('ndPass').value && $('ndUser').value.trim() === cur.user && (typed === cur.url || 'http://' + typed === cur.url || 'https://' + typed === cur.url)) { ndSheet(false); return; }
+    msg('CONNECTING…');
+    try { await Y2K.ndConnect($('ndUrl').value, $('ndUser').value, $('ndPass').value); }
+    catch (e) { msg(String(e.message || e).toUpperCase(), 'bad'); return; }
+    ndSheet(false); ndLoad();
+  };
+  if ($('ndRefresh')) $('ndRefresh').onclick = () => { ndSheet(false); ndLoad(); };
+  if ($('ndForget')) $('ndForget').onclick = () => { Y2K.ndForget(); ndSheet(false); ndLoad(); };
+  $('ndClose').onclick = () => ndSheet(false);
+  el.onkeydown = (e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT' && e.target.type !== 'checkbox') $('ndSave').click(); if (e.key === 'Escape') ndSheet(false); };
+  $(c ? 'ndPass' : 'ndUrl').focus();
+}
+// the Artist Bio panel can connect / disconnect too: follow it (storage event, polled as a fallback)
+let ndSeen = '';
+function checkNd() { const v = safe(() => localStorage.getItem(Y2K.ND_KEY), '') || ''; if (v !== ndSeen) ndLoad(); }
+window.addEventListener('storage', (e) => { if (e.key === Y2K.ND_KEY) checkNd(); });
+setInterval(checkNd, 3000);
 
 /* ------------------------------------------------ navigation & remembered positions */
 const top_ = () => stack[stack.length - 1];
@@ -266,9 +396,11 @@ function render() {
 function draw() {
   const body = $('body');
   $('rail').innerHTML = '';
-  if (!trackCount) {
-    body.innerHTML = '<div class="empty"><b>NO MUSIC YET</b>' + 'Add your music folders and they appear here' + '<br><span class="btn lime" id="addmusic">+ ADD MUSIC FOLDERS</span></div>';
-    $('addmusic').onclick = () => Y2K.runCommand('Configure');
+  if (!albums.length) {
+    body.innerHTML = !loaded || ndState === 'loading' ? '<div class="empty loading"><b>SCANNING…</b>' + (loaded ? 'Reading the albums on your Navidrome server' : 'Reading your media library') + '</div>'
+      : '<div class="empty"><b>NO MUSIC YET</b>Add your music folders, or connect a Navidrome server, and the albums appear here' +
+        '<br><span class="btn lime" id="addmusic">+ ADD MUSIC FOLDERS</span> <span class="btn" id="addnd">' + (Y2K.ndCfg() ? 'NAVIDROME SETTINGS' : 'CONNECT NAVIDROME') + '</span></div>';
+    if ($('addmusic')) { $('addmusic').onclick = () => Y2K.runCommand('Configure'); $('addnd').onclick = () => ndSheet(true); }
     $('crumb').innerHTML = ''; return;
   }
   const top = top_();
@@ -276,6 +408,8 @@ function draw() {
   if (top && top.type === 'album') {
     const a = byKey.get(top.value);
     if (a) return renderAlbum(a);
+    // a server album while the server's list is still loading: wait for it
+    if (top.value.startsWith('nd:') && ndState === 'loading') { body.innerHTML = '<div class="empty loading"><b>LOADING…</b>Reading the albums on your Navidrome server</div>'; return; }
     stack.pop(); saveState(); return draw();   // album gone after a rescan
   }
   let list = albums;
@@ -406,8 +540,8 @@ function renderGrid(list, head) {
       const [g, label, open] = head(a);   // open: a record label the header leads to
       if (label !== last) { last = label; h += '<div class="letter' + (open ? ' go" data-open="' + esc(open) + '" title="Show only this label\'s releases' : '') + '" data-g="' + esc(g) + '">' + esc(label) + '</div>'; }
     }
-    h += '<div class="card" data-a="' + esc(a.key) + '" data-k="' + esc(a.key) + '"><div class="cv" data-dir="' + esc(a.dir) + '" data-track="' + esc(a.tracks[0] ? a.tracks[0].path : '') + '"><div class="ph">' + esc((a.album || '?').charAt(0).toUpperCase()) + '</div></div>' +
-      '<div class="tt">' + esc(a.album) + '</div><div class="aa">' + esc(a.aa) + '</div><div class="yy">' + esc(a.year || '----') + ' · ' + (showCat && a.cat ? esc(a.cat) : a.tracks.length + ' TRK') + '</div>' +
+    h += '<div class="card" data-a="' + esc(a.key) + '" data-k="' + esc(a.key) + '"' + (a.nd ? ' title="On your Navidrome server"' : '') + '><div class="cv" data-dir="' + esc(a.dir) + '" data-track="' + esc(a.nd ? '' : a.tracks[0] ? a.tracks[0].path : '') + '"' + (a.nd ? ' data-cover="' + esc(a.cover) + '"' : '') + '><div class="ph">' + esc((a.album || '?').charAt(0).toUpperCase()) + '</div>' + (a.nd ? '<span class="src">NAVIDROME</span>' : '') + '</div>' +
+      '<div class="tt">' + esc(a.album) + '</div><div class="aa">' + esc(a.aa) + '</div><div class="yy">' + esc(a.year || '----') + ' · ' + (showCat && a.cat ? esc(a.cat) : (a.tracks ? a.tracks.length : a.n) + ' TRK') + '</div>' +
       (a.multi && a.edition ? '<div class="ed" title="One of several versions of this album">' + esc(a.edition) + '</div>' : '') + '</div>';
   }
   h += '</div>';
@@ -416,6 +550,7 @@ function renderGrid(list, head) {
     if (!en.isIntersecting) return;
     io.unobserve(en.target);
     const el = en.target;
+    if (el.dataset.cover !== undefined) { ndArt(el, el.dataset.cover, 200); return; }
     Y2K.thumb(Y2K.toFwd(el.dataset.dir), 160, el.dataset.track).then((u) => { if (u) { el.style.backgroundImage = 'url("' + u + '")'; const p = el.querySelector('.ph'); if (p) p.remove(); } });
   }), { root: $('body'), rootMargin: '300px' });
   $('body').querySelectorAll('.cv[data-dir]').forEach((el) => io.observe(el));
@@ -423,9 +558,18 @@ function renderGrid(list, head) {
   $('body').querySelectorAll('.card').forEach((el) => {
     const a = byKey.get(el.dataset.k);
     el.onclick = () => go(() => stack.push({ type: 'album', value: a.key }));
-    el.ondblclick = (e) => { e.stopPropagation(); Y2K.loadPaths(a.tracks.map((t) => t.path)); if (top_() && top_().type === 'album') back(); };
+    el.ondblclick = (e) => { e.stopPropagation(); withPaths(a, (p) => Y2K.loadPaths(p)); if (top_() && top_().type === 'album') back(); };
     el.oncontextmenu = (e) => { e.preventDefault(); albumMenu(e.clientX, e.clientY, a); };
   });
+}
+
+// a server album's cover (the placeholder letter stays when it has none)
+function ndArt(el, cover, size) {
+  const u = Y2K.ndCover(cover, size);
+  if (!u) return;
+  const img = new Image();
+  img.onload = () => { if (!el.isConnected) return; el.style.backgroundImage = 'url("' + u + '")'; const p = el.querySelector('.ph'); if (p) p.remove(); };
+  img.src = u;
 }
 
 /* ------------------------------------------------ letter / decade rail */
@@ -462,6 +606,13 @@ $('rail').addEventListener('mousemove', (e) => { if (!railDrag || !(e.buttons & 
 document.addEventListener('mouseup', () => { railDrag = false; });
 
 function renderAlbum(a) {
+  if (!a.tracks) {   // a server album: fetch its tracks first
+    $('body').innerHTML = '<div class="empty loading"><b>LOADING…</b>Fetching the album from your Navidrome server</div>';
+    const still = () => { const t = top_(); return t && t.type === 'album' && t.value === a.key; };
+    tracksOf(a).then(() => { if (still()) { renderAlbum(a); restorePos(); } })
+      .catch((e) => { if (still()) $('body').innerHTML = '<div class="empty"><b>SERVER ERROR</b>' + esc(e.name === 'TypeError' || e.name === 'AbortError' ? 'Can\'t reach the Navidrome server' : e.message || e) + '</div>'; });
+    return;
+  }
   const multi = new Set(a.tracks.map((t) => t.disc || '1')).size > 1;
   let tr = '', lastDisc = null;
   a.tracks.forEach((t, i) => {
@@ -474,14 +625,16 @@ function renderAlbum(a) {
     '<div class="m">' + [esc(a.year), a.label ? '<span class="alink" data-label="' + esc(a.label) + '" title="Show this label\'s releases">' + esc(a.label) + '</span>' : '', esc(a.genre),
       a.tracks.length + (a.tracks.length === 1 ? ' track' : ' tracks'), mins + ' min'].filter(Boolean).join(' · ') + '</div>' +
     (a.edition || a.cat ? '<div class="m ed">' + esc([a.edition, a.cat].filter(Boolean).join(' · ')) + '</div>' : '') +
-    '<div class="btns"><span class="btn lime" id="bplay">▶ Play</span><span class="btn" id="badd">+ Add</span><span class="btn" id="bnew">New playlist</span><span class="btn" id="bdir">Folder</span></div>' +
+    '<div class="btns"><span class="btn lime" id="bplay">▶ Play</span><span class="btn" id="badd">+ Add</span><span class="btn" id="bnew">New playlist</span><span class="btn" id="bdir">' + (a.nd ? 'Navidrome' : 'Folder') + '</span></div>' +
     '</div></div><div class="tracks">' + tr + '</div></div>';
-  Y2K.thumb(Y2K.toFwd(a.dir), 264, a.tracks[0] && a.tracks[0].path).then((u) => { const b = $('big'); if (u && b) b.style.backgroundImage = 'url("' + u + '")'; });
+  if (a.nd) { const u = Y2K.ndCover(a.cover, 300); if (u) $('big').style.backgroundImage = 'url("' + u + '")'; }
+  else Y2K.thumb(Y2K.toFwd(a.dir), 264, a.tracks[0] && a.tracks[0].path).then((u) => { const b = $('big'); if (u && b) b.style.backgroundImage = 'url("' + u + '")'; });
   const paths = a.tracks.map((t) => t.path);
   $('bplay').onclick = () => Y2K.playPaths(paths);
   $('badd').onclick = () => addToActive(paths);
   $('bnew').onclick = () => newPlaylist(a.album, paths);
-  $('bdir').onclick = () => Y2K.openFile(Y2K.toFwd(a.dir));
+  $('bdir').onclick = () => a.nd ? ndWeb(a) : Y2K.openFile(Y2K.toFwd(a.dir));
+  if (a.nd) $('bdir').title = 'Open this album in Navidrome\'s web player';
   $('body').querySelectorAll('.tr').forEach((el) => { el.ondblclick = (e) => { if (!e.target.closest('.alink')) Y2K.loadPaths(paths, a.tracks[+el.dataset.i].path); }; el.title = 'Double-click to load into Library Selection (double-click it there to play)'; });
   $('body').querySelectorAll('.alink').forEach((el) => { el.onclick = (e) => { e.stopPropagation(); if (el.dataset.label) openLabel(el.dataset.label); else searchArtist(el.dataset.artist); }; });
 }
@@ -495,10 +648,10 @@ function newPlaylist(name, paths) { const n = safe(() => H.createPlaylist(H.play
 let menuEl = null;
 function albumMenu(x, y, a) {
   if (menuEl) menuEl.remove();
-  const paths = a.tracks.map((t) => t.path);
   menuEl = document.createElement('div'); menuEl.className = 'menu';
-  [['▶  Play', () => Y2K.playPaths(paths)], ['Add to current playlist', () => addToActive(paths)], ['Send to new playlist', () => newPlaylist(a.album, paths)],
-    ['More by ' + a.aa, () => searchArtist(a.aa)], ...(a.label ? [['More on ' + a.label, () => openLabel(a.label)]] : []), ['Open folder', () => Y2K.openFile(Y2K.toFwd(a.dir))]]
+  [['▶  Play', () => withPaths(a, (p) => Y2K.playPaths(p))], ['Add to current playlist', () => withPaths(a, addToActive)], ['Send to new playlist', () => withPaths(a, (p) => newPlaylist(a.album, p))],
+    ['More by ' + a.aa, () => searchArtist(a.aa)], ...(a.label ? [['More on ' + a.label, () => openLabel(a.label)]] : []),
+    a.nd ? ['Open in Navidrome', () => ndWeb(a)] : ['Open folder', () => Y2K.openFile(Y2K.toFwd(a.dir))]]
     .forEach(([t, f]) => { const d = document.createElement('div'); d.textContent = t; d.onclick = () => { menuEl.remove(); menuEl = null; f(); }; menuEl.appendChild(d); });
   document.body.appendChild(menuEl);
   const r = menuEl.getBoundingClientRect();
@@ -537,7 +690,7 @@ function checkLibSearch() {
   const r = safe(() => JSON.parse(localStorage.getItem('y2k:libSearch')), null);
   if (!r || !r.t || r.t <= lastSearchT) return;
   lastSearchT = r.t;
-  if (trackCount) searchArtist(r.q);
+  if (albums.length) searchArtist(r.q);
 }
 window.addEventListener('storage', (e) => { if (e.key === 'y2k:libSearch') checkLibSearch(); });
 setInterval(checkLibSearch, 600);
@@ -547,6 +700,7 @@ const reload = Y2K.debounce(load, 2500);
 document.addEventListener('dragover', (e) => e.preventDefault());
 document.addEventListener('drop', (e) => e.preventDefault());
 setTimeout(load, 30);
+ndLoad();
 </script>
 </body>
 </html>

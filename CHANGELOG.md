@@ -1,5 +1,27 @@
 # Changelog
 
+## v1.4 — 2026-10-23
+
+> **Updating from v1.3:** press **DOWNLOAD & INSTALL** on the notice at the top of the deck, or go to **CUSTOMIZE DECK › SCREEN › PERFORMANCE › Theme version**. Run the update even if you don't use Navidrome: the installer is what fixes the buttons below on a standard foobar2000 install. To install by hand, close foobar2000, extract `Metalheart-Y2K-theme.zip` and run **`Install Metalheart Y2K.cmd`**.
+
+### Fixed
+
+- **PREFS, NAVIDROME, SEARCH and + MUSIC did nothing on a standard (installed) foobar2000.** Neither did *+ Add music folders* in the Media Library or the right-click actions in the Lyrics and Tags panels. The theme only looked for `foobar2000.exe` where a portable install keeps it. Now the installer saves where your foobar2000 is, and the theme also checks the usual install folders. If it still can't find foobar2000, it tells you to run the installer again instead of doing nothing.
+- **Playing an album from Navidrome in the Artist Bio panel failed** unless foo_navidrome had the same server set up in its own preferences. Server tracks now play straight from the server, so the theme's own Navidrome settings are enough.
+
+### New
+
+**Navidrome albums in the Media Library**
+
+- Click **+ NAVIDROME** at the top of the Media Library and enter your server's address (the one you open Navidrome at in a browser, for example `192.168.1.10:4533`), your user name and your password.
+- The server's albums then appear next to your own, with a blue **NAVIDROME** badge and their covers. They show up in every tab, sort and search: artists, genres, years, recently added and record labels.
+- Click an album to see its tracks. **Play**, **+ Add**, **New playlist**, double-click and the right-click menu all work the same as for your own albums. The **Navidrome** button opens the album in Navidrome's web player.
+- Albums you already have on this computer are left out, so nothing shows up twice. A tick box in the Navidrome settings shows them anyway, and another hides the server's albums without disconnecting.
+- The pill shows how many server albums are listed. It turns amber with a **!** if the server can't be reached; hover over it to see why. **Refresh albums** picks up music you've added to the server since.
+- You only set the server up once: the Artist Bio panel uses the same one. Nothing has to be set up in foo_navidrome (that component is still handy for its own browser, playlists and radio).
+- Only a salted token is saved, never your password. It is part of the track addresses foobar2000 keeps in its playlists.
+- No music folders yet? An empty Media Library now offers **Connect Navidrome** next to **+ Add music folders**.
+
 ## v1.3 — 2026-10-21
 
 > **Updating from v1.2:** the deck tells you about this update itself. Press **DOWNLOAD & INSTALL** on the notice at the top of the deck, or go to **CUSTOMIZE DECK › SCREEN › PERFORMANCE › Theme version**. It downloads the new version, closes foobar2000 when you press **CLOSE FOOBAR2000 & INSTALL**, and starts the installer, which restarts foobar2000 when it's done. Your deck settings, caches and library aren't touched. To install by hand instead, close foobar2000, extract `Metalheart-Y2K-theme.zip` and run **`Install Metalheart Y2K.cmd`**.
