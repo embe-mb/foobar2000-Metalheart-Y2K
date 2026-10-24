@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.4.1 — 2026-10-23
+
+> **Hotfix.** Update from the notice at the top of the deck, or **CUSTOMIZE DECK › SCREEN › PERFORMANCE › Theme version**.
+
+### Fixed
+
+- **No cover art in the deck for Navidrome tracks.** Albums from your Navidrome server had covers in the Media Library, but once a track was cued or playing, the deck showed *NO ART*. foobar2000 doesn't read artwork from a streamed track, and the deck only looked in the album's folder and in foobar2000's own artwork, neither of which a stream has. The deck now gets the cover from the server, the same way the Media Library does. The ALBUM ART theme colours, the Dossier tab and the album headers in Library Selection pick it up too.
+- **Server albums in Library Selection** each get their own cover in the album header. Before, every server album could end up with the same thumbnail, because they all shared one "folder", the server's address.
+
 ## v1.4 — 2026-10-23
 
 > **Updating from v1.3:** press **DOWNLOAD & INSTALL** on the notice at the top of the deck, or go to **CUSTOMIZE DECK › SCREEN › PERFORMANCE › Theme version**. Run the update even if you don't use Navidrome: the installer is what fixes the buttons below on a standard foobar2000 install. To install by hand, close foobar2000, extract `Metalheart-Y2K-theme.zip` and run **`Install Metalheart Y2K.cmd`**.

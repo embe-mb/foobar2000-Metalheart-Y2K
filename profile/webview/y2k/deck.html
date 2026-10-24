@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>Metalheart Deck</title>
-<link rel="stylesheet" href="common.css?v=22">
+<link rel="stylesheet" href="common.css?v=23">
 <style>
   body { display: flex; flex-direction: column; padding: 6px 8px 8px; gap: 6px; }
 
@@ -677,7 +677,7 @@
   </div>
 </div>
 
-<script src="common.js?v=22"></script>
+<script src="common.js?v=23"></script>
 <script>
 /* ---------------- fitting the deck to its window ----------------
    The deck is laid out for a strip about 420 px high. In a narrow window (e.g. on a vertical monitor) the cover
@@ -856,7 +856,8 @@ function render() {
   const aid = Y2K.firstOf(t.mb_artist) || Y2K.firstOf(t.mb_albumartist);
   if (!t.artistcountry && aid) Y2K.artistCountry(aid).then((cc) => { if (cur && cur._key === key && cc) $('aflag').innerHTML = Y2K.flagHTML(cc, 'artist country (MusicBrainz)'); });
 
-  showArt(Y2K.resolveArt(t));
+  // a Navidrome stream's cover comes from the server a moment later
+  showArt(Y2K.resolveArt(t, (a) => { if (cur && cur._key === key) showArt(a); }));
   loadCredits(t);
   updateTime();
 }

@@ -243,13 +243,55 @@ const Y2K = (() => {
 
   /* ------------------------------------------------------------- artwork
      Priority: folder.* > cover.* > front.* > embedded > any other image in
-     the folder (or a scans/artwork subfolder) > nothing.                    */
+     the folder (or a scans/artwork subfolder) > nothing.
+     Navidrome / Subsonic stream URLs have no folder and foobar2000 reads no artwork from them, so their cover
+     comes from the server (getCoverArt with the track's id and the login the URL already carries). That takes
+     a moment: resolveArt(t, late) answers 'none' at first and calls late(art) once the cover is in.        */
   const IMG = /\.(jpe?g|png|webp|gif|bmp|jfif)$/i;
   const artCache = new Map();
-  function resolveArt(t) {
+  const ndArtUrl = (path, size) => {
+    const m = /^(https?:\/\/[^?#]+)\/rest\/stream(?:\.view)?\?([^#]*)$/i.exec(path || '');
+    if (!m) return '';
+    const q = new URLSearchParams(m[2]);
+    if (!q.get('id')) return '';
+    ['format', 'maxBitRate', 'estimateContentLength', 'timeOffset'].forEach((k) => q.delete(k));
+    if (size) q.set('size', size);
+    return m[1] + '/rest/getCoverArt.view?' + q.toString();
+  };
+  // the cover of a stream URL as a data: URL (like readImage gives, so colour sampling works); '' if there is none
+  const ndArtMem = new Map(), ndArtDone = new Map();
+  function ndArt(path, size = 600) {
+    const url = ndArtUrl(path, size);
+    if (!url) return Promise.resolve('');
+    if (!ndArtMem.has(url)) {
+      if (ndArtMem.size > 80) { ndArtMem.clear(); ndArtDone.clear(); }
+      ndArtMem.set(url, (async () => {
+        const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 10000);
+        try {
+          const r = await fetch(url, { signal: ctl.signal });
+          if (!r.ok || !/^image\//i.test(r.headers.get('content-type') || '')) return '';
+          const b = await r.blob();
+          return await new Promise((res) => { const fr = new FileReader(); fr.onload = () => res(String(fr.result || '')); fr.onerror = () => res(''); fr.readAsDataURL(b); });
+        } catch (e) { ndArtMem.delete(url); return null; }   // unreachable: ask again next time
+        finally { clearTimeout(timer); }
+      })().then((v) => { if (v === null) return ''; ndArtDone.set(url, v); return v; }));
+    }
+    return ndArtMem.get(url);
+  }
+  function resolveArt(t, late) {
     if (!t || t._src === 'none') return { src: '', origin: 'none' };
     const ck = t.dir + '|' + (t._src !== 'none' ? t._key : '');
     if (artCache.has(ck)) return artCache.get(ck);
+    if (!t._local && ndArtUrl(t.path)) {
+      const url = ndArtUrl(t.path, 600);
+      if (ndArtDone.has(url)) {
+        const v = ndArtDone.get(url), r = { src: v, origin: v ? 'Navidrome server' : 'none' };
+        if (v) artCache.set(ck, r);
+        return r;
+      }
+      ndArt(t.path).then((v) => { if (v && late) late(resolveArt(t)); });
+      return { src: '', origin: 'none' };
+    }
     let res = null;
     const files = t._local ? listDir(t._dirFwd) : [];
     const imgs = files.filter((f) => !f.isDirectory && IMG.test(f.name));
@@ -781,7 +823,7 @@ const Y2K = (() => {
   /* --------------------------------------------------------------- theme updates
      VERSION is this copy of the theme: bump it for every GitHub release and tag the release v<VERSION>.
      checkUpdate asks GitHub for the latest release (cached an hour unless forced). */
-  const VERSION = '1.4';
+  const VERSION = '1.4.1';
   const REPO = 'embe-mb/foobar2000-Metalheart-Y2K';
   const verNum = (s) => String(s || '').replace(/^v/i, '').split('.').map((n) => parseInt(n, 10) || 0);
   function isNewer(a, b) {
@@ -1054,12 +1096,17 @@ const Y2K = (() => {
   // one-at-a-time worker so big JPEG decodes never stall the UI
   const thumbQueue = []; let thumbBusy = false; const thumbMem = new Map();
   /** Album thumbnail: the folder's cover image, else the art embedded in `trackPath`
-      (a file path, or { pl, idx, path } for an item already in a playlist). */
+      (a file path, or { pl, idx, path } for an item already in a playlist).
+      A Navidrome stream URL's "folder" is the server's /rest for every track, so those are cached by track id
+      and the cover comes from the server. */
   function thumb(dirFwd, size = 160, trackPath = '') {
-    if (!dirFwd) return Promise.resolve('');
-    const key = 'v2|' + size + '|' + dirFwd.toLowerCase();
+    const tp = trackPath && typeof trackPath === 'object' ? trackPath.path : trackPath;
+    const nd = ndArtUrl(tp) ? tp : '';
+    if (!dirFwd && !nd) return Promise.resolve('');
+    const key = nd ? 'nd|' + size + '|' + (/^https?:\/\/([^/?#]+)/i.exec(nd) || [])[1] + '|' + (/[?&]id=([^&#]+)/.exec(nd) || [])[1]
+      : 'v2|' + size + '|' + dirFwd.toLowerCase();
     if (thumbMem.has(key)) return Promise.resolve(thumbMem.get(key));
-    return new Promise((resolve) => { thumbQueue.push({ key, dirFwd, size, trackPath, resolve }); pumpThumbs(); });
+    return new Promise((resolve) => { thumbQueue.push({ key, dirFwd, size, trackPath, nd, resolve }); pumpThumbs(); });
   }
 
   /* Embedded art for tracks that aren't playing: foo_webview2 can only read artwork of
@@ -1113,9 +1160,9 @@ const Y2K = (() => {
         if (c && (c.v || Date.now() - c.t < 3 * DAY)) v = c.v;
         else {
           v = '';
-          const file = findDirArtFile(job.dirFwd);
-          let uri = file ? readImage(file) : '';
-          const src = job.trackPath;
+          const file = job.nd ? '' : findDirArtFile(job.dirFwd);
+          let uri = job.nd ? await ndArt(job.nd, Math.max(job.size * 2, 200)) : file ? readImage(file) : '';
+          const src = job.nd ? '' : job.trackPath;
           if (!uri && src && typeof src === 'object') { // an item that's already in a playlist: read it directly
             const same = safe(() => H.getPlaylistItemFormattedText(src.pl, src.idx, '%path%'), '') === src.path;
             uri = same ? safe(() => H.getPlaylistArtwork('front', src.pl, src.idx), '') || '' : await embeddedArt(src.path);
@@ -1129,7 +1176,7 @@ const Y2K = (() => {
               v = cv.toDataURL('image/jpeg', 0.82);
             } catch (e) { v = ''; }
           }
-          idb.set(job.key, { t: Date.now(), v });
+          if (v || !job.nd) idb.set(job.key, { t: Date.now(), v });   // a server that didn't answer is asked again
         }
         if (thumbMem.size > 4000) thumbMem.clear();
         thumbMem.set(job.key, v);
