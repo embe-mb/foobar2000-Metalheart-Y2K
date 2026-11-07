@@ -23,7 +23,7 @@
 </head>
 <body>
 <div class="bar" id="bar"><canvas id="cv"></canvas><span class="status" id="status"></span><div class="tip" id="tip"></div></div>
-<script src="common.js?v=29"></script>
+<script src="common.js?v=31"></script>
 <script src="alac.js?v=1"></script>
 <script>
 'use strict';
@@ -203,13 +203,13 @@ async function loadWave(info) {
   const hit = await cacheGet(info);
   if (my !== job) return;
   const ext = ((path.match(/\.([a-z0-9]+)$/i) || [])[1] || '').toLowerCase();
-  const decodable = !/^[a-z][a-z0-9+.-]+:\/\//i.test(path) && DECODABLE.test(ext) && !(+sub > 0) && +size > 0 && +size < 700e6;
+  const decodable = !/^[a-z][a-z0-9+.-]+:\/\//i.test(path) && (DECODABLE.test(ext) || !!ffmpegExe()) && !(+sub > 0) && +size > 0 && +size < (DECODABLE.test(ext) ? 700e6 : 4e9);
   if (hit) {
     wave = hit; dirty = true;
     if (hit.beat || hit.scanned || !decodable) { publishBeat(info, hit.beat); return; }
     // never scanned (cached before the BPM scanner existed, or built live back when this file couldn't be
     // decoded, e.g. ALAC): decode it now in the background for the beat grid and the exact waveform
-    const r = await decodeWave(path, my, hint).catch(() => null);
+    const r = await decodeWave(path, my, hint, size).catch(() => null);
     if (my !== job) return;
     if (r) { wave = r.w; dirty = true; cachePut(info, r.w, r.beat, true); }
     publishBeat(info, r && r.beat);
@@ -218,7 +218,7 @@ async function loadWave(info) {
   if (/^[a-z][a-z0-9+.-]+:\/\//i.test(path)) { publishBeat(info, null); startLive('STREAM · BUILDING AS IT PLAYS'); return; }
   if (decodable) {
     scanning = true; setStatus('SCANNING WAVEFORM + BPM…');
-    const r = await decodeWave(path, my, hint).catch(() => null);
+    const r = await decodeWave(path, my, hint, size).catch(() => null);
     if (my !== job) return;
     scanning = false;
     if (r) { wave = r.w; dirty = true; setStatus(''); publishBeat(info, r.beat); cachePut(info, r.w, r.beat, true); return; }
@@ -259,25 +259,63 @@ function alacAsync(buf) {
   });
 }
 
-async function decodeWave(path, my, hint) {
+/* ffmpeg.exe in the converter's encoders folder (y2k/encoders, up to two folders down), if there is one: it decodes
+   what the browser can't (WavPack, APE, DSD, odd FLACs...) so those get a real waveform and BPM scan too */
+let ffCache = { t: -1e9, exe: '' };
+function ffmpegExe() {
+  if (performance.now() - ffCache.t < 60000) return ffCache.exe;
+  const root = Y2K.profileDir + '/webview/y2k/encoders';
+  let exe = '';
+  const look = (d, depth) => {
+    for (const f of Y2K.listDir(d)) {
+      if (exe) return;
+      if (!f.isDirectory && /^ffmpeg\.exe$/i.test(f.name)) exe = (d + '/' + f.name).split('/').join(BS);
+      else if (f.isDirectory && depth < 2) look(d + '/' + f.name, depth + 1);
+    }
+  };
+  safe(() => look(root, 0));
+  ffCache = { t: performance.now(), exe };
+  return exe;
+}
+/* runs `make` (a cmd line that writes the file `tmp`), which is then renamed to its final name; the panel's web server
+   only sees it once complete. A failed command leaves a .fail marker so the wait stops early. Time allowed grows with
+   the file's size (a big hi-res file off a slow or sleeping drive took longer than the old flat minute) */
+async function pullFile(make, my, size) {
   const dir = Y2K.profileDir.split('/').join(BS) + BS + 'webview' + BS + 'y2k' + BS + 'wavecache';
-  const name = 'w' + Date.now() + '.bin', tmp = dir + BS + name + '.part';
-  safe(() => H.execute('cmd.exe', '/c (if not exist "' + dir + '" mkdir "' + dir + '") & del /q "' + dir + BS + '*.bin" 2>nul & copy /y "' + path + '" "' + tmp + '" >nul & move /y "' + tmp + '" "' + dir + BS + name + '" >nul', '', 'open', 0));
+  const name = 'w' + Date.now() + '.bin', tmp = dir + BS + name + '.part', fin = dir + BS + name;
+  safe(() => H.execute('cmd.exe', '/c (if not exist "' + dir + '" mkdir "' + dir + '") & del /q "' + dir + BS + '*.bin" "' + dir + BS + '*.fail" 2>nul & ((' +
+    make(tmp) + ') && move /y "' + tmp + '" "' + fin + '" >nul || (del /q "' + tmp + '" 2>nul & echo x>"' + fin + '.fail"))', '', 'open', 0));
+  const tries = Math.min(2400, 240 + Math.ceil((+size || 0) / 250e3));   // a minute, plus a second per MB
   let ok = false;
-  for (let i = 0; i < 240 && my === job; i++) { // the copy appears under its final name only when complete
+  for (let i = 0; i < tries && my === job; i++) {
     await new Promise((r) => setTimeout(r, 250));
     try { ok = (await fetch('wavecache/' + name, { method: 'HEAD', cache: 'no-store' })).ok; } catch (e) {}
     if (ok) break;
+    if (i % 4 === 3) { let bad = false; try { bad = (await fetch('wavecache/' + name + '.fail', { method: 'HEAD', cache: 'no-store' })).ok; } catch (e) {} if (bad) break; }
   }
-  if (!ok || my !== job) return null;
-  let buf = await (await fetch('wavecache/' + name, { cache: 'no-store' })).arrayBuffer();
-  safe(() => H.execute('cmd.exe', '/c del /q "' + dir + BS + name + '"', '', 'open', 0));
-  if (my !== job) return null;
+  let buf = null;
+  if (ok && my === job) try { buf = await (await fetch('wavecache/' + name, { cache: 'no-store' })).arrayBuffer(); } catch (e) { buf = null; }
+  safe(() => H.execute('cmd.exe', '/c del /q "' + fin + '" "' + fin + '.fail" 2>nul', '', 'open', 0));
+  return my === job ? buf : null;
+}
+async function decodeWave(path, my, hint, size) {
   const ext = ((path.match(/\.([a-z0-9]+)$/i) || [])[1] || '').toLowerCase();
   let ab = null;
-  if (/^(m4a|mp4)$/.test(ext)) { const a = await alacAsync(buf); ab = a.ab; buf = a.buf; } // Apple Lossless: the browser has no decoder for it
-  if (!ab && !buf) return null;
-  if (!ab) ab = await new OfflineAudioContext(1, 1, 8000).decodeAudioData(ext === 'flac' ? flacBare(buf) : buf);
+  if (DECODABLE.test(ext)) {
+    try {
+      let buf = await pullFile((tmp) => 'copy /y "' + path + '" "' + tmp + '" >nul', my, size);
+      if (my !== job) return null;
+      if (buf && /^(m4a|mp4)$/.test(ext)) { const a = await alacAsync(buf); ab = a.ab; buf = a.buf; } // Apple Lossless: the browser has no decoder for it
+      if (!ab && buf) ab = await new OfflineAudioContext(1, 1, 8000).decodeAudioData(ext === 'flac' ? flacBare(buf) : buf);
+    } catch (e) { ab = null; }
+  }
+  if (!ab && my === job && ffmpegExe()) {   // the browser couldn't: ffmpeg turns it into a small 8 kHz WAV
+    try {
+      const buf = await pullFile((tmp) => '"' + ffmpegExe() + '" -nostdin -v error -y -i "' + path + '" -map 0:a:0 -ac 2 -ar 8000 -c:a pcm_s16le -f wav "' + tmp + '"', my, size);
+      if (buf) ab = await new OfflineAudioContext(1, 1, 8000).decodeAudioData(buf);
+    } catch (e) { ab = null; }
+  }
+  if (!ab || my !== job) return null;
   const beatP = analyzeBeatAsync(ab, hint);
   const ch = Math.min(2, ab.numberOfChannels), L = ab.length, w = newWave(ch);
   let top = 0;

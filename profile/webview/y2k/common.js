@@ -8,6 +8,11 @@ const Y2K = (() => {
   const H = chrome.webview.hostObjects.sync.foo_uie_webview;
   const BS = String.fromCharCode(92);           // backslash, kept out of literals on purpose
   const SEP = String.fromCharCode(30);          // record separator used in title-formatting output
+  // no Edge "saved info" / typed-text suggestions under the theme's text boxes (they list things typed anywhere)
+  document.addEventListener('focusin', (e) => {
+    const el = e.target;
+    if (el && el.tagName === 'INPUT' && el.type !== 'password' && !el.hasAttribute('autocomplete')) el.setAttribute('autocomplete', 'off');
+  }, true);
   const toFwd = (p) => (p || '').split(BS).join('/');
 
   const safe = (fn, fallback = '') => { try { const v = fn(); return v === undefined || v === null ? fallback : v; } catch (e) { return fallback; } };
@@ -336,6 +341,100 @@ const Y2K = (() => {
     return res;
   }
 
+  /* --------------------------------------------------------------- format art
+     A scan of the medium itself, used on the control pod's format icon in place of the cover:
+       CD cd.*  (disc 2 of a set: cd2.* / disc2.*)   SACD sacd.*   DVD dvd.*   Blu-ray bluray.*   (each falls back to cd.*)
+       vinyl vinyl.* / vinylA.* / vinylB.*  (record 2 of a set: vinyl2A.*, vinyl2B.* ...)
+       cassette cassette.*   8-track 8track.*   MiniDisc minidisc.*
+     Looked for next to the track, in its scans / artwork / covers subfolder, and, for a "CD2" / "Disc 2" folder, in
+     the album folder above it. The vinyl side is the track number's letter (A1, B3 ...) or else which half of the
+     record the track is on. Returns { path, size } (forward slashes) or null. */
+  const ART_SUB = /^[-_ #]*(scans?|artwork|covers?|images?|art|pictures?|booklet)$/i;
+  const DISC_DIR = /^(cd|disc|disk|dvd|side)\s*[-_]?\s*\d+\b/i;
+  const fmtArtCache = new Map();
+  function mediaArtCandidates(t, kind) {
+    const n = Math.max(1, parseInt(t.discnumber || t.discnum, 10) || 1), multi = +t.totaldiscs > 1 || n > 1;
+    const numbered = (stem) => [stem + n, stem + ' ' + n, stem + '_' + n, stem + '-' + n];
+    const optical = { cd: 'cd', sacd: 'sacd', dvd: 'dvd', bluray: 'bluray', minicd: 'cd', laser: 'laserdisc' }[kind];
+    if (optical) {
+      const stems = [optical, ...(optical === 'bluray' ? ['blu-ray', 'bd'] : [])];
+      const out = [];
+      for (const s of stems) out.push(...(multi ? numbered(s) : []), s);
+      if (optical !== 'cd') out.push(...(multi ? numbered('cd') : []), 'cd');
+      out.push(...(multi ? numbered('disc') : []), 'disc');
+      return out;
+    }
+    if (kind === 'vinyl' || kind === 'seven' || kind === 'shellac' || kind === 'flexi') {
+      const raw = String(t.tracknumber || t.tracknum || '').trim(), m = /^([A-Za-z])\s*\d*$/.exec(raw);
+      let letter = m ? m[1].toUpperCase() : '';
+      const tn = parseInt(raw, 10), tot = parseInt(t.totaltracks, 10);
+      const half = tn && tot ? (tn <= Math.ceil(tot / 2) ? 'A' : 'B') : 'A';
+      const ab = letter ? (letter.charCodeAt(0) - 65) % 2 === 0 ? 'A' : 'B' : half;
+      const out = [];
+      if (multi) { if (letter) out.push('vinyl' + n + letter); out.push('vinyl' + n + ab, 'vinyl' + n + 'A', 'vinyl' + n); }
+      if (letter && !multi) out.push('vinyl' + letter);
+      if (!multi || n === 1) out.push('vinyl' + ab);
+      out.push('vinylA', 'vinyl');
+      return [...new Set(out)];
+    }
+    const own = { cassette: 'cassette', eight: '8track', md: 'minidisc' }[kind];
+    if (!own) return [];
+    return [...(multi ? numbered(own) : []), own, ...(kind === 'eight' ? ['8-track'] : []), ...(kind === 'md' ? ['md'] : [])];
+  }
+  function findMediaArt(t, kind) {
+    if (!t || !t._local || !t._dirFwd) return null;
+    const stems = mediaArtCandidates(t, kind);
+    if (!stems.length) return null;
+    const ck = t._dirFwd + '|' + kind + '|' + stems[0] + '|' + (stems[1] || '');
+    const hit = fmtArtCache.get(ck);
+    if (hit && Date.now() - hit.t < 20000) return hit.v;
+    const dirs = [t._dirFwd];
+    const leaf = t._dirFwd.split('/').pop();
+    if (DISC_DIR.test(leaf)) dirs.push(t._dirFwd.replace(/\/[^/]+$/, ''));
+    const pools = [];
+    for (const d of dirs) {
+      const files = listDir(d);
+      pools.push([d, files]);
+      for (const f of files) if (f.isDirectory && ART_SUB.test(f.name)) pools.push([d + '/' + f.name, listDir(d + '/' + f.name)]);
+    }
+    let v = null;
+    for (const stem of stems) {
+      for (const [d, files] of pools) {
+        const f = files.find((x) => !x.isDirectory && IMG.test(x.name) && x.name.replace(IMG, '').toLowerCase() === stem.toLowerCase());
+        if (f) { v = { path: d + '/' + f.name, size: f.size }; break; }
+      }
+      if (v) break;
+    }
+    if (fmtArtCache.size > 60) fmtArtCache.clear();
+    fmtArtCache.set(ck, { t: Date.now(), v });
+    return v;
+  }
+  /** Reads an image file and hands back a small copy (longest side <= max px) plus what it is like: its aspect and
+      whether its corners are see-through (a cut-out disc PNG). Small copies keep big scans out of memory. */
+  const smallImgMem = new Map();
+  function smallImage(pathFwd, max = 320, size = 0) {
+    const ck = pathFwd + '|' + max + '|' + size;
+    if (smallImgMem.has(ck)) return smallImgMem.get(ck);
+    const p = new Promise((res) => {
+      const src = readImage(pathFwd);
+      if (!src) return res(null);
+      const im = new Image();
+      im.onload = () => {
+        const w = im.naturalWidth, h = im.naturalHeight, k = Math.min(1, max / Math.max(w, h));
+        const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(w * k)); c.height = Math.max(1, Math.round(h * k));
+        const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(im, 0, 0, c.width, c.height);
+        let cutout = false;
+        try { const px = (a, b) => x.getImageData(a, b, 1, 1).data[3]; cutout = [px(1, 1), px(c.width - 2, 1), px(1, c.height - 2), px(c.width - 2, c.height - 2)].every((a) => a < 40); } catch (e) {}
+        res({ src: c.toDataURL(cutout ? 'image/png' : 'image/jpeg', 0.9), w, h, aspect: w / h, cutout });
+      };
+      im.onerror = () => res(null);
+      im.src = src;
+    });
+    if (smallImgMem.size > 40) smallImgMem.delete(smallImgMem.keys().next().value);
+    smallImgMem.set(ck, p);
+    return p;
+  }
+
   /* --------------------------------------------------------------- rip logs */
   const RIPPERS = [
     // CUERipper writes an EAC-style log ("EAC extraction logfile from ..."): it must be recognised before EAC
@@ -527,11 +626,18 @@ const Y2K = (() => {
   /* All rip documentation in the album folder (.log, .accurip, and .txt files whose first lines name a ripper).
      Returns the main one — EAC first, see RIP_RANK — with the rest in .others. */
   const logCache = new Map();
+  /** The disc a rip document's file name says it is for (CD2.log, Disc 2.log, "Album (Disc 2 of 3).log", d2.log), or 0. */
+  function logDiscOf(name) {
+    const b = String(name || '').replace(/\.[^.]+$/, '');
+    const m = /(?:^|[^a-z])(?:cd|disc|disk|disco|d)\s*[-_.#]?\s*0*(\d{1,2})(?!\d)/i.exec(b) || /[[(]\s*0*(\d{1,2})\s*(?:of|\/)\s*\d{1,2}\s*[\])]/i.exec(b);
+    return m ? +m[1] : 0;
+  }
   const DOC_FILE = /\.(log|txt|accurip)$/i, NOT_RIP = /audiochecker|spectro|lac\b|auCDtect|install|debug|lyric|readme|\bnfo\b/i;
   const namesRipper = (text) => RIPPERS.some(([re]) => re.test(text.slice(0, 400)));
   function findRipLog(t) {
     if (!t || !t._local) return null;
-    const ck = t.dir + '|' + t.tracknum;
+    const discN = Math.max(1, parseInt(t.discnumber || t.discnum, 10) || 1), multiDisc = +t.totaldiscs > 1 || discN > 1;
+    const ck = t.dir + '|' + discN + '|' + t.tracknum;
     if (logCache.has(ck)) return logCache.get(ck);
     const files = listDir(t._dirFwd).filter((f) => !f.isDirectory && DOC_FILE.test(f.name) && !NOT_RIP.test(f.name) && f.size < 2e6);
     files.sort((a, b) => b.size - a.size);
@@ -558,6 +664,19 @@ const Y2K = (() => {
       if (d) docs.push(Object.assign(d, { file: f.name, path: p, dirKey: t.dir, track: d.track || null }));
     }
     docs.sort((a, b) => ripRank(a) - ripRank(b));   // stable: biggest file first within a ripper
+    // a set of discs ripped into one folder: each disc's tracks get that disc's own log (CD2.log, "Album (Disc 2).log",
+    // or, failing names, the n-th of one log per disc). A later disc with no log of its own shows none.
+    if (multiDisc && docs.length) {
+      docs.forEach((d) => { d.disc = logDiscOf(d.file); });
+      let mine;
+      if (docs.some((d) => d.disc)) mine = docs.filter((d) => d.disc === discN || (!d.disc && discN === 1));
+      else {
+        const lead = docs.filter((d) => d.ripper === docs[0].ripper && /\.log$/i.test(d.file)).sort((a, b) => a.file.localeCompare(b.file, undefined, { numeric: true }));
+        const tot = +t.totaldiscs || 0;
+        mine = lead.length > 1 && (!tot || lead.length === tot) ? [lead[discN - 1]].filter(Boolean) : discN === 1 ? docs : [];
+      }
+      docs.length = 0; docs.push(...mine);
+    }
     const out = docs[0] || null;
     if (out) out.others = docs.slice(1);
     if (logCache.size > 40) logCache.clear();
@@ -784,7 +903,23 @@ const Y2K = (() => {
   /* --------------------------------------------------------------- MusicBrainz & web */
   const store = {
     get(k, ttlMs) { try { const o = JSON.parse(localStorage.getItem(k)); if (o && (!ttlMs || Date.now() - o.t < ttlMs)) return o.v; } catch (e) {} return undefined; },
-    set(k, v) { try { localStorage.setItem(k, JSON.stringify({ t: Date.now(), v })); } catch (e) { try { localStorage.clear(); } catch (_) {} } },
+    set(k, v) {
+      const val = JSON.stringify({ t: Date.now(), v });
+      try { localStorage.setItem(k, val); return; } catch (e) {}
+      // storage full: drop the older half of the MusicBrainz / web lookups and try again. (This used to clear
+      // localStorage outright, which took every theme setting with it.)
+      try {
+        const old = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (!/^(mb|web):/.test(key)) continue;
+          let t = 0; try { t = JSON.parse(localStorage.getItem(key)).t || 0; } catch (_) {}
+          old.push([t, key]);
+        }
+        old.sort((x, y) => x[0] - y[0]).slice(0, Math.max(1, Math.ceil(old.length / 2))).forEach(([, key]) => localStorage.removeItem(key));
+        localStorage.setItem(k, val);
+      } catch (_) {}
+    },
   };
   const DAY = 86400000;
   let mbChain = Promise.resolve(), mbLast = 0;
@@ -823,7 +958,7 @@ const Y2K = (() => {
   /* --------------------------------------------------------------- theme updates
      VERSION is this copy of the theme: bump it for every GitHub release and tag the release v<VERSION>.
      checkUpdate asks GitHub for the latest release (cached an hour unless forced). */
-  const VERSION = '1.5';
+  const VERSION = '1.6';
   const REPO = 'embe-mb/foobar2000-Metalheart-Y2K';
   const verNum = (s) => String(s || '').replace(/^v/i, '').split('.').map((n) => parseInt(n, 10) || 0);
   function isNewer(a, b) {
@@ -858,6 +993,39 @@ const Y2K = (() => {
      %APPDATA%\foobar2000-v2 and the program elsewhere, so the installer leaves the program's path in fb2k-exe.txt
      and the usual install folders come after that. */
   const profileDir = toFwd(safe(() => H.profilePath)).replace(/\/$/, '');
+
+  /* --------------------------------------------------------------- settings backup
+     Settings live in the panels' localStorage, which a foobar2000 / WebView2 crash can lose (it came back empty once
+     and every setting was back to default). A copy is kept in profile\y2k-settings.json, outside the theme folder,
+     and put back whenever localStorage comes up without any of them. Navidrome sign-in isn't copied. */
+  const SETTINGS_KEYS = ['deck:cfg', 'deck:custTab', 'y2k:scheme', 'y2k:schemeMode', 'y2k:look', 'y2k:native', 'y2k:convert',
+    'y2k:updSkip', 'y2k:ndOpenAck', 'lyrics:size', 'lyrics:auto', 'lib:view', 'pl:follow', 'info:tab', 'dossier:collapsed'];
+  const SETTINGS_FILE = profileDir + '/y2k-settings.json', BAK_SNAP = 'y2k:bakSnap';
+  const settingsNow = () => { const o = {}; for (const k of SETTINGS_KEYS) { const v = safe(() => localStorage.getItem(k), null); if (v !== null) o[k] = v; } return o; };
+  (function restoreSettings() {
+    if (!profileDir || Object.keys(settingsNow()).length) return;
+    const saved = safe(() => JSON.parse(readText(SETTINGS_FILE)), null);
+    if (!saved || typeof saved !== 'object' || !saved.keys) return;
+    for (const k of SETTINGS_KEYS) if (typeof saved.keys[k] === 'string') safe(() => localStorage.setItem(k, saved.keys[k]));
+    safe(() => localStorage.setItem(BAK_SNAP, JSON.stringify(settingsNow())));
+    console.warn('[y2k] settings were missing: restored from ' + SETTINGS_FILE);
+  })();
+  function backupSettings() {
+    if (!profileDir) return;
+    const keys = settingsNow();
+    if (!Object.keys(keys).length) return;   // never overwrite a good backup with nothing
+    const snap = JSON.stringify(keys);
+    if (safe(() => localStorage.getItem(BAK_SNAP), '') === snap) return;   // unchanged (or another panel already wrote it)
+    safe(() => localStorage.setItem(BAK_SNAP, snap));
+    const b64 = btoa(String.fromCharCode(...new TextEncoder().encode(JSON.stringify({ saved: new Date().toISOString(), keys }, null, 1))));
+    if (b64.length > 24000) return;   // a command line can't carry more; settings are a few KB
+    const file = SETTINGS_FILE.split('/').join('\\');
+    safe(() => H.execute('powershell.exe', '-NoProfile -NonInteractive -WindowStyle Hidden -Command "$p=\'' + file.replace(/'/g, "''") + '\';' +
+      '[IO.File]::WriteAllBytes($p+\'.tmp\',[Convert]::FromBase64String(\'' + b64 + '\'));Move-Item -LiteralPath ($p+\'.tmp\') -Destination $p -Force"', '', 'open', 0));
+  }
+  setTimeout(backupSettings, 8000 + Math.random() * 4000);
+  setInterval(backupSettings, 45000);
+  window.addEventListener('pagehide', backupSettings);
   const exePath = (() => {
     const has = (dir) => !!dir && listDir(dir).some((f) => !f.isDirectory && f.name.toLowerCase() === 'foobar2000.exe');
     const saved = toFwd(readText(profileDir + '/webview/y2k/fb2k-exe.txt')).trim().replace(/\/foobar2000\.exe$/i, '');
@@ -1043,6 +1211,83 @@ const Y2K = (() => {
     return words.map((x) => { const d = (dur * (x.trim().length + 1)) / chars, r = { s: x, t0: t, t1: t + d }; t += d; return r; });
   }
 
+  /* --------------------------------------------------------------- lyrics engine (LRCLIB -> NetEase -> QQ Music)
+     Synced lyrics only, and fast. OpenLyrics walks its sources one at a time and can settle on unsynced text, so the
+     theme looks for itself the moment a track starts that has no synced lyrics yet: LRCLIB straight from the page,
+     then NetEase and QQ Music through tools\lyrics.ps1 (those two don't answer web pages). What it finds is saved
+     where OpenLyrics saves (profile\lyrics\Artist - Title.lrc), so every panel, and OpenLyrics, reads it from there.
+     LRCLIB's answer also reaches the other panels at once through localStorage while the file is being written.
+     One panel searches per track (a shared lock); a track nothing was found for is left alone for 3 days. */
+  const LYR_MISS = 'y2k:lyrmiss', LYR_NOW = 'y2k:lyrnow', LYR_LOCK = 'y2k:lyrlock';
+  const lyrBusy = new Set();
+  const isSyncedText = (s) => /\[\d+:\d+(?:[.:]\d+)?\][^\S\n]*\S/.test(s || '');
+  const lyricsSource = (s) => ((String(s || '').match(/^\[re:(LRCLIB|NETEASE|QQMUSIC)\]/m) || [])[1] || '');
+  /** Lyrics a panel fetched for this track moments ago (before its file is on disk): { text, src } or null. */
+  function lyricsNow(t) {
+    const v = safe(() => JSON.parse(localStorage.getItem(LYR_NOW)), null);
+    return v && t && v.key === t._key && Date.now() - v.at < 600000 ? v : null;
+  }
+  function lyricsHelper(job) {
+    const ps1 = (profileDir + '/webview/y2k/tools/lyrics.ps1').split('/').join(BS);
+    return safe(() => { H.execute('powershell.exe', '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + ps1 + '" -Job ' + b64utf8(JSON.stringify(job)), '', 'open', 0); return true; }, false);
+  }
+  async function lrclib(t) {
+    const len = Math.round(+t.lengthsec || 0), artist = firstOf(t.artist), bare = (s) => String(s || '').replace(/\s*[([][^)\]]*[)\]]/g, '').replace(/\s+(feat\.?|ft\.?|featuring)\s.*$/i, '').trim();
+    const get = async (url) => {
+      const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 8000);
+      try { const r = await fetch(url, { signal: ctl.signal }); return r.ok ? await r.json() : null; } catch (e) { return null; } finally { clearTimeout(timer); }
+    };
+    const q = (o) => new URLSearchParams(Object.entries(o).filter(([, v]) => v)).toString();
+    const exact = await get('https://lrclib.net/api/get?' + q({ artist_name: artist, track_name: t.title, album_name: t.album, duration: len }));
+    if (exact && isSyncedText(exact.syncedLyrics)) return exact.syncedLyrics;
+    for (const title of [...new Set([t.title, bare(t.title)])]) {
+      const list = await get('https://lrclib.net/api/search?' + q({ track_name: title, artist_name: bare(artist) }));
+      const hits = (Array.isArray(list) ? list : []).filter((x) => isSyncedText(x.syncedLyrics) && (!len || !x.duration || Math.abs(x.duration - len) <= 4));
+      hits.sort((a, b) => Math.abs((a.duration || len) - len) - Math.abs((b.duration || len) - len));
+      if (hits.length) return hits[0].syncedLyrics;
+    }
+    return '';
+  }
+  /** Looks for synced lyrics for the playing track t (call it when none were found locally). Resolves { text, src }
+      when it finds some (also saved to disk for every panel), else null. Safe to call repeatedly. */
+  async function lyricsFind(t) {
+    if (!t || t._src !== 'playing' || !t.lrcname || !t.title) return null;
+    const key = t._key;
+    if (lyrBusy.has(key)) return null;
+    const miss = safe(() => JSON.parse(localStorage.getItem(LYR_MISS)), null) || {};
+    if (miss[key] && Date.now() - miss[key] < 3 * DAY) return null;
+    const lock = safe(() => JSON.parse(localStorage.getItem(LYR_LOCK)), null);
+    if (lock && lock.key === key && Date.now() - lock.at < 45000) return null;   // another panel is on it
+    safe(() => localStorage.setItem(LYR_LOCK, JSON.stringify({ key, at: Date.now() })));
+    lyrBusy.add(key);
+    const out = (profileDir + '/lyrics/' + t.lrcname + '.lrc').split('/').join(BS);
+    const job = { artist: firstOf(t.artist), title: t.title, album: t.album || '', duration: +t.lengthsec || 0, out };
+    try {
+      const text = await lrclib(t);
+      if (text) {
+        const full = '[re:LRCLIB]\n' + text.replace(/\r/g, '').trim() + '\n';
+        safe(() => localStorage.setItem(LYR_NOW, JSON.stringify({ key, text: full, src: 'LRCLIB', at: Date.now() })));
+        lyricsHelper(Object.assign(job, { text: b64utf8(full) }));
+        return { text: full, src: 'LRCLIB' };
+      }
+      const status = profileDir + '/webview/y2k/lyrcache/' + pathId(key) + '-' + Date.now().toString(36) + '.txt';
+      if (!lyricsHelper(Object.assign(job, { status: status.split('/').join(BS), sources: 'netease,qq' }))) return null;
+      const t0 = Date.now();
+      while (Date.now() - t0 < 30000) {
+        await new Promise((r) => setTimeout(r, 700));
+        const st = readText(status).trim();
+        if (!st) continue;
+        if (st.startsWith('ok')) { const text = readText(toFwd(out)); if (isSyncedText(text)) return { text, src: st.slice(3) || lyricsSource(text) }; }
+        break;
+      }
+      const m = safe(() => JSON.parse(localStorage.getItem(LYR_MISS)), null) || {};
+      m[key] = Date.now();
+      const ks = Object.keys(m); if (ks.length > 600) ks.sort((a, b) => m[a] - m[b]).slice(0, ks.length - 600).forEach((k) => delete m[k]);
+      safe(() => localStorage.setItem(LYR_MISS, JSON.stringify(m)));
+      return null;
+    } finally { lyrBusy.delete(key); }
+  }
+
   /* --------------------------------------------------------------- misc helpers */
   const fmtTime = (s) => {
     s = Math.max(0, Math.floor(s || 0));
@@ -1090,6 +1335,7 @@ const Y2K = (() => {
       r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
     }));
     return {
+      open,
       get: (k) => open().then((db) => new Promise((res) => { const q = db.transaction('t').objectStore('t').get(k); q.onsuccess = () => res(q.result); q.onerror = () => res(undefined); })).catch(() => undefined),
       set: (k, v) => open().then((db) => new Promise((res) => { const tx = db.transaction('t', 'readwrite'); tx.objectStore('t').put(v, k); tx.oncomplete = () => res(); tx.onerror = () => res(); })).catch(() => {}),
     };
@@ -1114,20 +1360,101 @@ const Y2K = (() => {
     return '';
   }
 
-  // one-at-a-time worker so big JPEG decodes never stall the UI
+  // worker: cache hits come out of IndexedDB in batches; covers that have to be made are made one at a time so big
+  // JPEG decodes never stall the UI. Jobs whose card has scrolled away (alive() false) are dropped, not done.
   const thumbQueue = []; let thumbBusy = false; const thumbMem = new Map();
+  const memPut = (k, v) => { thumbMem.delete(k); thumbMem.set(k, v); if (thumbMem.size > 1500) thumbMem.delete(thumbMem.keys().next().value); };
   /** Album thumbnail: the folder's cover image, else the art embedded in `trackPath`
       (a file path, or { pl, idx, path } for an item already in a playlist).
       A Navidrome stream URL's "folder" is the server's /rest for every track, so those are cached by track id
-      and the cover comes from the server. */
-  function thumb(dirFwd, size = 160, trackPath = '') {
+      and the cover comes from the server. Cached thumbnails remember what they were made from (the cover file's
+      name and size, or the track file's size for embedded art) and are made again when that changes, so a new
+      folder.jpg shows up. alive(): optional, false once the thumbnail isn't wanted any more (resolves null). */
+  function thumb(dirFwd, size = 160, trackPath = '', alive = null) {
     const tp = trackPath && typeof trackPath === 'object' ? trackPath.path : trackPath;
     const nd = ndArtUrl(tp) ? tp : '';
     if (!dirFwd && !nd) return Promise.resolve('');
     const key = nd ? 'nd|' + size + '|' + (/^https?:\/\/([^/?#]+)/i.exec(nd) || [])[1] + '|' + (/[?&]id=([^&#]+)/.exec(nd) || [])[1]
-      : 'v2|' + size + '|' + dirFwd.toLowerCase();
+      : 'v3|' + size + '|' + dirFwd.toLowerCase();
     if (thumbMem.has(key)) return Promise.resolve(thumbMem.get(key));
-    return new Promise((resolve) => { thumbQueue.push({ key, dirFwd, size, trackPath, nd, resolve }); pumpThumbs(); });
+    return new Promise((resolve) => { thumbQueue.push({ key, dirFwd, size, trackPath, nd, alive, resolve }); pumpThumbs(); });
+  }
+  // what a folder's thumbnail is made from, cheaply (one directory listing, cached)
+  function thumbSig(job) {
+    if (job.nd) return 'nd';
+    const file = findDirArtFile(job.dirFwd);
+    if (file) {
+      const dir = file.replace(/\/[^/]+$/, ''), name = file.split('/').pop(), f = listDir(dir).find((x) => x.name === name);
+      return 'f|' + name.toLowerCase() + '|' + (f ? f.size : 0);
+    }
+    const tp = job.trackPath && typeof job.trackPath === 'object' ? job.trackPath.path : job.trackPath;
+    if (!tp) return 'none';
+    const tf = toFwd(tp), f = listDir(tf.replace(/\/[^/]+$/, '')).find((x) => x.name === tf.split('/').pop());
+    return 'e|' + (f ? f.size : 0);
+  }
+  const idbMany = (keys) => idb.open().then((db) => new Promise((res) => {
+    const out = new Array(keys.length), tx = db.transaction('t'), st = tx.objectStore('t');
+    keys.forEach((k, i) => { const q = st.get(k); q.onsuccess = () => { out[i] = q.result; }; });
+    tx.oncomplete = () => res(out); tx.onerror = () => res(out); tx.onabort = () => res(out);
+  })).catch(() => keys.map(() => undefined));
+  async function makeThumb(job) {
+    const file = job.nd ? '' : findDirArtFile(job.dirFwd);
+    let uri = job.nd ? await ndArt(job.nd, Math.max(job.size * 2, 200)) : file ? readImage(file) : '';
+    const src = job.nd ? '' : job.trackPath;
+    if (!uri && src && typeof src === 'object') { // an item that's already in a playlist: read it directly
+      const same = safe(() => H.getPlaylistItemFormattedText(src.pl, src.idx, '%path%'), '') === src.path;
+      uri = same ? safe(() => H.getPlaylistArtwork('front', src.pl, src.idx), '') || '' : await embeddedArt(src.path);
+    } else if (!uri && src) uri = await embeddedArt(src);
+    if (!uri) return '';
+    try {
+      const img = new Image(); img.src = uri; await img.decode();
+      const s = job.size, cv = document.createElement('canvas'); cv.width = cv.height = s;
+      const k = Math.max(s / img.naturalWidth, s / img.naturalHeight), w = img.naturalWidth * k, h = img.naturalHeight * k;
+      const cx = cv.getContext('2d'); cx.imageSmoothingQuality = 'high'; cx.drawImage(img, (s - w) / 2, (s - h) / 2, w, h);
+      img.src = '';   // let go of the full-size image straight away
+      return cv.toDataURL('image/jpeg', 0.82);
+    } catch (e) { return ''; }
+  }
+  async function pumpThumbs() {
+    if (thumbBusy) return;
+    thumbBusy = true;
+    try {
+      while (thumbQueue.length) {
+        // newest first (what's on screen now); drop what scrolled away
+        const batch = [];
+        while (thumbQueue.length && batch.length < 48) {
+          const j = thumbQueue.pop();
+          if (thumbMem.has(j.key)) { j.resolve(thumbMem.get(j.key)); continue; }
+          if (j.alive && !safe(j.alive, true)) { j.resolve(null); continue; }
+          batch.push(j);
+        }
+        if (!batch.length) continue;
+        const cached = await idbMany(batch.map((j) => j.key));
+        const todo = [];
+        batch.forEach((j, i) => {
+          const c = cached[i];
+          if (c && (j.nd ? c.v || Date.now() - c.t < 3 * DAY : c.sig !== undefined)) { j.cached = c; todo.push(j); }
+          else todo.push(j);
+        });
+        for (const j of todo) {
+          if (thumbMem.has(j.key)) { j.resolve(thumbMem.get(j.key)); continue; }
+          if (j.alive && !safe(j.alive, true)) { j.resolve(null); continue; }
+          let v;
+          if (j.cached && j.nd) v = j.cached.v;
+          else {
+            const sig = thumbSig(j);
+            if (j.cached && j.cached.sig === sig && (j.cached.v || Date.now() - j.cached.t < 3 * DAY)) v = j.cached.v;
+            else {
+              v = await makeThumb(j);
+              if (v || !j.nd) idb.set(j.key, { t: Date.now(), v, sig });   // a server that didn't answer is asked again
+              await new Promise((r) => setTimeout(r, 0));   // breathe between decodes
+            }
+          }
+          memPut(j.key, v);
+          j.resolve(v);
+        }
+      }
+    } finally { thumbBusy = false; }
   }
 
   /* Embedded art for tracks that aren't playing: foo_webview2 can only read artwork of
@@ -1170,44 +1497,6 @@ const Y2K = (() => {
     if (pl >= 0) safe(() => H.deletePlaylist(pl));
     embBusy = false;
   }
-  async function pumpThumbs() {
-    if (thumbBusy) return;
-    thumbBusy = true;
-    while (thumbQueue.length) {
-      const job = thumbQueue.pop(); // newest first: what's on screen now
-      let v = thumbMem.get(job.key);
-      if (v === undefined) {
-        const c = await idb.get(job.key);
-        if (c && (c.v || Date.now() - c.t < 3 * DAY)) v = c.v;
-        else {
-          v = '';
-          const file = job.nd ? '' : findDirArtFile(job.dirFwd);
-          let uri = job.nd ? await ndArt(job.nd, Math.max(job.size * 2, 200)) : file ? readImage(file) : '';
-          const src = job.nd ? '' : job.trackPath;
-          if (!uri && src && typeof src === 'object') { // an item that's already in a playlist: read it directly
-            const same = safe(() => H.getPlaylistItemFormattedText(src.pl, src.idx, '%path%'), '') === src.path;
-            uri = same ? safe(() => H.getPlaylistArtwork('front', src.pl, src.idx), '') || '' : await embeddedArt(src.path);
-          } else if (!uri && src) uri = await embeddedArt(src);
-          if (uri) {
-            try {
-              const img = new Image(); img.src = uri; await img.decode();
-              const s = job.size, cv = document.createElement('canvas'); cv.width = cv.height = s;
-              const k = Math.max(s / img.naturalWidth, s / img.naturalHeight), w = img.naturalWidth * k, h = img.naturalHeight * k;
-              cv.getContext('2d').drawImage(img, (s - w) / 2, (s - h) / 2, w, h);
-              v = cv.toDataURL('image/jpeg', 0.82);
-            } catch (e) { v = ''; }
-          }
-          if (v || !job.nd) idb.set(job.key, { t: Date.now(), v });   // a server that didn't answer is asked again
-        }
-        if (thumbMem.size > 4000) thumbMem.clear();
-        thumbMem.set(job.key, v);
-      }
-      job.resolve(v);
-      await new Promise((r) => setTimeout(r, 0));
-    }
-    thumbBusy = false;
-  }
-
   /* --------------------------------------------------------------- playlist helpers */
   const LIBSEL = 'Library Selection';
   function playlistIndexByName(name, create) {
@@ -1499,7 +1788,7 @@ const Y2K = (() => {
     root.className = 'logv spl' + (pop ? ' popped' : '');
     root.innerHTML = '<div class="logv-win"><div class="logv-head"><b>SAVED PLAYLISTS</b><span class="logv-sub" id="splCount"></span><span class="logv-sp"></span>' +
       '<span class="logv-btn lime" data-act="close" title="Close (Esc)">DONE</span></div>' +
-      (save ? '<div class="spl-save"><span class="spl-lbl">SAVE</span><input id="splName" type="text" spellcheck="false" maxlength="120" placeholder="Name this playlist">' +
+      (save ? '<div class="spl-save"><span class="spl-lbl">SAVE</span><input id="splName" type="text" spellcheck="false" autocomplete="off" maxlength="120" placeholder="Name this playlist">' +
         '<span class="logv-btn lime" id="splSave">SAVE</span><span class="spl-msg" id="splMsg"></span></div>' : '') +
       '<div class="spl-main"><div class="spl-list" id="splList"></div><div class="spl-detail" id="splDetail"></div></div></div>';
     doc.body.appendChild(root);
@@ -1547,7 +1836,7 @@ const Y2K = (() => {
       const box = $s('splDetail'), r = list.find((x) => x.id === pick);
       if (!r) { box.innerHTML = list.length ? '<div class="logv-wait">PICK A PLAYLIST<br><span>Double-click one to play it</span></div>' : ''; return; }
       box.innerHTML = '<div class="spl-head"><div class="spl-big" id="splBig"></div><div class="spl-info">' +
-        (renaming ? '<input id="splRen" type="text" spellcheck="false" maxlength="120" value="' + esc(r.name) + '">' : '<div class="spl-title" title="Double-click to rename">' + esc(r.name) + '</div>') +
+        (renaming ? '<input id="splRen" type="text" spellcheck="false" autocomplete="off" maxlength="120" value="' + esc(r.name) + '">' : '<div class="spl-title" title="Double-click to rename">' + esc(r.name) + '</div>') +
         '<div class="spl-meta">' + r.n + (r.n === 1 ? ' track' : ' tracks') + ' · ' + esc(dur(r.secs)) + ' · saved ' + when(r.updated) + '</div>' +
         (r.file ? '<div class="spl-file' + (r.fileErr ? ' bad' : '') + '" title="' + esc(r.fileErr ? 'Last update failed: ' + r.fileErr : 'Rewritten after every change') + '"><em>' + (r.fileErr ? 'FILE NOT UPDATED' : 'FILE') + '</em>' + esc(r.file) + '</div>' : '') +
         (note && note.id === r.id ? '<div class="spl-note ' + note.cls + '">' + esc(note.text) + '</div>' : '') +
@@ -1818,6 +2107,6 @@ const Y2K = (() => {
     H, BS, esc, log, safe, getTrack, listDir, readText, readImage, resolveArt, findRipLog, parseRipLog,
     countryName, flagHTML, flagFile, barcodeSVG, mb, getJSON, store, artistCountry, openUrl, openFile, runCommand, runFb2k, VERSION, checkUpdate,
     ND_KEY, ndCfg, nd, ndCover, ndStream, ndSongs, ndPaths, ndPlaylists, ndPlaylist, ndSongId, ndAddToPlaylist, ndAllAlbums, ndConnect, ndForget,
-    fmtTime, qualityOf, firstOf, clean, debounce, onTrackContextChange, trackKey, profileDir, exePath, DAY, parseLRC, lyricWords,
+    fmtTime, qualityOf, firstOf, clean, debounce, onTrackContextChange, trackKey, profileDir, exePath, DAY, parseLRC, lyricWords, lyricsFind, lyricsNow, lyricsSource, isSyncedText, findMediaArt, smallImage,
   };
 })();

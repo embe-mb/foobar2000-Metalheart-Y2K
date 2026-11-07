@@ -82,7 +82,7 @@
 
 <script>/* inside the Track Info panel this page runs in a frame: use the panel's connection to foobar2000 */
 if (window.parent !== window) try { const P = window.parent; Object.defineProperty(window, 'chrome', { value: P.chrome, configurable: true, writable: true }); window.fb2k = P.fb2k; } catch (e) {}</script>
-<script src="common.js?v=29"></script>
+<script src="common.js?v=31"></script>
 <script>
 'use strict';
 const { H, esc, safe, mb, getJSON, DAY } = Y2K;
@@ -227,8 +227,8 @@ async function loadDisco(artist, t, my) {
   const tabs = '<div class="tabs">' + types.map((x) => '<span class="pill ' + (x === discoFilter ? 'lime' : '') + '" data-filter="' + x + '">' + x + 'S</span>').join('') +
     '<span class="pill ndset ' + (nc ? 'blue' : 'dark') + '" id="ndSet" title="' + (nc ? 'Playing albums from Navidrome: ' + esc(nc.user + ' @ ' + nc.url) : 'Connect a Navidrome server so albums it has can be played from here') + '">NAVIDROME ' + (nc ? '✓' : '+') + '</span></div>' +
     '<div class="ndform" id="ndForm" hidden>' +
-    '<label for="ndUrl">Server</label><input id="ndUrl" spellcheck="false" placeholder="http://192.168.1.10:4533" value="' + esc(nc ? nc.url : '') + '">' +
-    '<label for="ndUser">User</label><input id="ndUser" spellcheck="false" value="' + esc(nc ? nc.user : '') + '">' +
+    '<label for="ndUrl">Server</label><input id="ndUrl" spellcheck="false" autocomplete="off" placeholder="http://192.168.1.10:4533" value="' + esc(nc ? nc.url : '') + '">' +
+    '<label for="ndUser">User</label><input id="ndUser" spellcheck="false" autocomplete="off" value="' + esc(nc ? nc.user : '') + '">' +
     '<label for="ndPass">Password</label><input id="ndPass" type="password" placeholder="' + (nc ? '(saved, type to change)' : '') + '">' +
     '<div class="links"><span class="btn lime" id="ndSave">Connect</span>' + (nc ? '<span class="btn" id="ndForget">Forget</span>' : '') + '<span class="ndmsg" id="ndMsg"></span></div>' +
     '<div class="src">ALBUMS NOT IN YOUR MEDIA LIBRARY ARE LOOKED UP ON THIS SERVER (THE SAME ONE THE MEDIA LIBRARY SHOWS). ONLY A SALTED TOKEN IS SAVED, NEVER THE PASSWORD.</div></div>';

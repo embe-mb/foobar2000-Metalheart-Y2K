@@ -123,10 +123,19 @@
       are ignored.
     * Control pod: transport, volume (wheel works too), playback order
       (click to cycle, right-click to reset), stop-after-current, the source
-      icon (CD, vinyl with a tonearm that follows the song, 7" single, tape,
-      MiniDisc...), oscilloscope, stereo LED VU meter, and shortcuts: PREFS,
+      icon (CD, vinyl with a tonearm that follows the song, 7" single,
+      cassette, 8-track deck, MiniDisc...), oscilloscope, stereo LED VU meter, and shortcuts: PREFS,
       NAVIDROME, SEARCH, + MUSIC, CUSTOMIZE DECK and FULL SCREEN (same as
       F11; EXIT or Esc to leave).
+    * FORMAT SCANS: put a scan of your physical copy in the album folder
+      (or its scans/artwork folder) and the source icon uses it instead of
+      the cover: cd.jpg (cd1, cd2... per disc), dvd, bluray, sacd, vinyl.jpg
+      (the label; vinylA, vinyl2B... for sides and discs; a PNG cut out
+      around the record becomes the whole record), cassette, 8track and
+      minidisc. A scan also sets the format when the media tag says Digital
+      Media. Without an 8-track scan, the bottom of the cover is the label.
+    * Double-click the 3D centerpiece to jump to the next one (this turns
+      CYCLE on). Long titles scroll, pause, then decode back to the start.
     * POD SCREEN: a pocket-LCD game that plays along to the beat — RUNNER
       (jumps a cube on each beat), SHIP (shoots stars on the beat) or BLOB
       (bounces on the beat; heavy bass wakes its little friend), or CYCLE.
@@ -177,7 +186,8 @@
     CUSTOMIZE DECK > SEEKING.
 
   MEDIA LIBRARY (left) — custom browser for your whole library
-    ARTISTS / ALBUMS / GENRES / YEARS views, cover grid, search box.
+    ARTISTS / ALBUMS / GENRES / YEARS views, cover grid, search box
+    (the ✕ or Esc clears it).
     A letter rail down the left jumps through long lists (click or drag).
     ALBUMS sorts: ALL (A-Z), YEAR (earliest or latest first), RANDOM,
     RECENTLY ADDED and RECORD LABEL (each label's releases by date or by
@@ -201,7 +211,7 @@
     Album groups with cover, label, country flag, format and running time.
     Click / Ctrl+click / Shift+click to select, double-click or Enter to play,
     Delete to remove, Ctrl+A select all, Ctrl+F filter. Right-click a track for
-    queue / send to new playlist / crop / open folder. Send to new playlist
+    queue / send to new playlist / crop / open folder / Convert…. Send to new playlist
     starts one and keeps you here; "Add to “New Playlist”" keeps filling it,
     and Add to playlist ▸ adds to a saved playlist (or a Navidrome one). FOLLOW keeps the playing
     track in view. Add to playlist ▸ New saved playlist… (songs) or a tab's
@@ -231,9 +241,12 @@
                whipper and CUETools (.accurip); VIEW RIP LOG opens the log
                in its own window, one tab per log in the album folder.
     LYRICS     Synced lyrics that scroll with the song and light up word by
-               word (word-synced "enhanced LRC" files too). OpenLyrics finds
-               them (LRCLIB first, then QQ/NetEase/Genius) and caches them in
-               <settings folder>\lyrics\. Mouse wheel = look around.
+               word (word-synced "enhanced LRC" files too). When a song
+               has no synced lyrics yet, the theme searches LRCLIB, then
+               NetEase and QQ Music itself straight away; OpenLyrics keeps
+               working alongside it (manual search, editing, plain lyrics).
+               Both save to <settings folder>\lyrics\, and the panel shows
+               where the lyrics came from. Mouse wheel = look around.
                Right-click: search again / manually, edit, mark as
                instrumental, copy, text size.
     ARTIST BIO Photo, origin + flag, years active, genres, band members,
@@ -251,6 +264,25 @@
     The classic layout keeps the native Columns UI tabs instead.
 
   Panels follow the playing track; when stopped they show the selected one.
+
+  CONVERTING (Library Selection: select tracks, right-click > Convert…)
+    A Metalheart version of foobar2000's Converter Setup. Pick a format
+    (FLAC, MP3, AAC, ALAC, Opus, Ogg Vorbis, WavPack, APE or WAV) and its
+    quality, then where the files go: NEXT TO THE ALBUM makes a sibling
+    folder with the format in brackets ("Album [FLAC]" -> "Album [MP3]"),
+    or ANOTHER FOLDER (BROWSE...). Tags, the cover, and the album's artwork
+    and scans come along. The encoders are .exe files you drop into
+    <settings folder>\webview\y2k\encoders (ENCODERS FOLDER opens it; its
+    README.txt has the download links): flac.exe, lame.exe, ffmpeg.exe and
+    so on. ffmpeg.exe alone covers most formats, and the seek bar uses it
+    too, for files the browser can't decode (WavPack, APE, DSD...).
+    Game-music rips (PSF, SPC, VGM...) only decode inside foobar2000, so
+    convert those with foobar2000's own right-click > Convert.
+
+  SETTINGS BACKUP
+    Your deck and panel settings are also copied to
+    <settings folder>\y2k-settings.json and put back by themselves if
+    foobar2000 ever loses them (after a crash, for example).
 
 
 ---------------------------------------------------------------------

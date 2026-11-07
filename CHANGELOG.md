@@ -1,5 +1,75 @@
 # Changelog
 
+## v1.6 — 2026-11-07
+
+> **Updating from v1.5:** press **DOWNLOAD & INSTALL** on the notice at the top of the deck, or go to **CUSTOMIZE DECK › SCREEN › PERFORMANCE › Theme version**. To install by hand, close foobar2000, extract `Metalheart-Y2K-theme.zip` and run **`Install Metalheart Y2K.cmd`**. Your deck settings, caches, saved playlists and library aren't touched. Album thumbnails are rebuilt once as you scroll, because the thumbnail cache changed.
+
+<img width="880" alt="The deck playing a cassette" src="https://raw.githubusercontent.com/embe-mb/foobar2000-Metalheart-Y2K/main/docs/v1.6/deck-cassette.png" />
+
+### New
+
+**Format icons, and scans of your own copies**
+
+<img width="760" alt="Format icons: CD, CD with a disc scan, vinyl, cassette, 8-track, MiniDisc" src="https://raw.githubusercontent.com/embe-mb/foobar2000-Metalheart-Y2K/main/docs/v1.6/format-icons.png" />
+
+- The source icon in the control pod uses a scan of your physical copy when there's one in the album folder (or its scans / artwork subfolder):
+  - **Discs:** `cd.jpg`, or `cd1`, `cd2`… for each disc of a set. `dvd`, `bluray` and `sacd` work too.
+  - **Vinyl:** `vinyl.jpg` is the centre label. `vinylA`, `vinylB`, `vinyl2A`… pick the side and disc, from the track number (A1, B2…) or which half of the album you're in. A PNG cut out around the record becomes the whole record.
+  - **Tapes and the rest:** `cassette`, `8track` and `minidisc`.
+  - Any image type works (`.jpg`, `.png`, `.webp`…).
+  - A scan also sets the format when the media tag says *Digital Media*. A Bandcamp download of a tape release with a `cassette.jpg` beside it shows as a cassette.
+- **Redrawn icons:**
+  - **Turntable:** the tonearm is a real arm with a counterweight, arm rest and cue lever. The stylus tracks across the record as the song plays and never runs onto the label, on 12" and 7".
+  - **8-track:** a player deck with program lights 1–4 (which program the song is on), VU needles that follow the music and the cartridge in the slot. Without an `8track` scan, the bottom strip of the cover is the cartridge label.
+  - **MiniDisc:** looks like a real MiniDisc, with its label, logo, arrow, notch and a moving shine.
+  - **Cassette:** the tape winds from one reel onto the other as the song plays.
+  - **CD:** less foil, so the art shows more.
+
+**Convert**
+
+<img width="720" alt="The CONVERT window" src="https://raw.githubusercontent.com/embe-mb/foobar2000-Metalheart-Y2K/main/docs/v1.6/convert-window.png" />
+
+- Right-click songs in **Library Selection** and choose **Convert…**. A Metalheart version of foobar2000's Converter Setup opens.
+- **Formats:** FLAC, MP3, AAC, ALAC, Opus, Ogg Vorbis, WavPack, APE or WAV, each with its quality settings.
+- **Where the files go:**
+  - **Next to the album:** a folder beside it with the format swapped in the name (`Album [FLAC]` becomes `Album [MP3]`). Disc subfolders are kept.
+  - **Another folder:** pick one with **BROWSE…**.
+- Tags and the cover come along, and so can the album's other artwork and scans. Several tracks convert at once, and **CANCEL** stops the job.
+- **Encoders:**
+  - The encoders are programs you add yourself: drop `ffmpeg.exe`, `flac.exe`, `lame.exe` and the like into the theme's new `encoders` folder. **ENCODERS FOLDER** opens it, and its `README.txt` has the download links.
+  - `ffmpeg.exe` alone covers most formats.
+- Game-music rips (PSF, SPC, VGM…) only decode inside foobar2000. They're skipped with a note; convert them with foobar2000's own right-click › Convert.
+
+**Faster synced lyrics**
+
+- When a song has no synced lyrics yet, the theme searches for them itself as soon as it starts: **LRCLIB** first, then **NetEase** and **QQ Music**. Before, you waited on OpenLyrics, which tries its sources one at a time and could settle on plain lyrics first.
+- Lyrics are only accepted when the timing fits the song's length. Credit lines ("Lyricist:", "Composer:") are left out, and the panel shows where the lyrics came from.
+- Lyrics are saved in the same place OpenLyrics saves them. Songs with nothing anywhere aren't searched again for 3 days; **Search for lyrics** in the panel's right-click menu tries again straight away.
+- **OpenLyrics stays.** It's still what you use to search manually, edit or sync lyrics by hand, and mark songs as instrumental. Tip: in **Preferences › Tools › OpenLyrics › Searching**, keep LRCLIB, NetEase, QQ Music and Local files.
+
+**Smaller things**
+
+- **Double-click the 3D centerpiece** to jump to the next one. This turns CYCLE on.
+- **Long titles:** after a long title scrolls across and pauses, it decodes back to the start with the scrambled-letter effect instead of jumping back.
+- **Rip logs on multi-disc albums:** the deck shows the log for the disc that's playing. A disc with no log of its own shows none.
+- **Clearing the search:** the Media Library's search box has a **✕** to clear it (Esc works too).
+- **Control pod buttons** use a cleaner, easier-to-read font.
+- **Settings backup:** your settings are copied to `y2k-settings.json` in foobar2000's settings folder and put back by themselves if they're ever lost.
+
+### Fixed
+
+- **All theme settings back to default after a crash.** When the theme's web cache filled up, it emptied its whole storage, settings included. Now only the oldest cached lookups are cleared, and the settings backup above covers anything else.
+- **Changed covers didn't update in the Media Library.** Thumbnails now remember which image they were made from and are rebuilt when it changes, such as a new `folder.jpg`.
+- **The seek bar stayed on "LIVE · BUILDING AS IT PLAYS"** for some songs every time they played:
+  - Big files now get more time to load (it was a flat minute).
+  - When the browser can't decode a file, the seek bar uses `ffmpeg.exe` from the `encoders` folder if it's there. That covers WavPack, APE and DSD too, so their waveforms and BPM scans work.
+- **Library Selection flickered** when the mouse rested on it for a few seconds. Rows that haven't changed are no longer redrawn, and play-count updates no longer reload the whole list.
+- **Edge's "Saved info" list** no longer pops up under the theme's search and text boxes.
+- **Faster on slower PCs:**
+  - Album covers load in batches, and covers that scroll out of view before they're made are skipped.
+  - The deck asks foobar2000 for the playback state far less often.
+  - If the deck still can't keep up, it drops to about 30 frames a second by itself, and goes back up when there's room.
+
 ## v1.5 — 2026-10-24
 
 > **Updating from v1.4.1:** press **DOWNLOAD & INSTALL** on the notice at the top of the deck, or go to **CUSTOMIZE DECK › SCREEN › PERFORMANCE › Theme version**. To install by hand, close foobar2000, extract `Metalheart-Y2K-theme.zip` and run **`Install Metalheart Y2K.cmd`**. Your deck settings, caches and library aren't touched.

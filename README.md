@@ -86,7 +86,7 @@ Navidrome / Subsonic needs no component: the theme connects to the server itself
 This theme is primarily catered to those who use MusicBrainz Picard and scrobble their information to ListenBrainz. Various parts of this theme pull information from MusicBrainz to further enhance the experience of those that love to see data represented in multitudes of ways.
 
 - **The main deck.** It has:
-  - a jewel case with your cover art and a spinning source icon (CD, vinyl with a moving tonearm, 7" single, tape, MiniDisc and more);
+  - a jewel case with your cover art and a source icon for the format you're playing: a spinning CD, a turntable with a real tonearm, a 7" single, a cassette with winding tape, an 8-track deck, a MiniDisc and more. Put a scan of your copy in the album folder (`cd.jpg`, `vinyl.jpg`, `cassette.jpg`, `8track.jpg`, `minidisc.jpg`…) and the icon shows it;
   - a simulated LCD screen showing the track details, badges, the artist's country flag, a karaoke-style lyric line that lights up word by word, a spectrum analyser and a BPM readout that flashes on the beat;
   - a progress strip you can drag to scan the track, styled as a bar, VCR tape counter, Y2K blocks or a comet;
   - a control pod with a stereo VU meter, an oscilloscope, a FULL SCREEN button and a little game screen (RUNNER, SHIP or BLOB) that plays along to the beat.
@@ -97,21 +97,24 @@ This theme is primarily catered to those who use MusicBrainz Picard and scrobble
   - **PYRAMID:** counter-rotating glass tiers that shatter on drops;
   - **CUBE:** a glass cube with energy balls bouncing off its walls on the beat, tesla arcs and orbiting mini-cubes;
   - **REACTOR:** an icosahedral speaker cabinet whose woofers boom on the bass, whose spikes jet out on the treble, and whose glowing core fires beams through the seams;
-  - **CYCLE:** a different one on every new track.
+  - **CYCLE:** a different one on every new track. Double-click the centerpiece to jump to the next one.
 - **CUSTOMIZE DECK.** It opens in its own window and changes apply live:
   - every centerpiece has its own tab of settings;
   - **LCD backgrounds:** bubbles, TV static, digital rain and a retro grid;
   - **Theme colour:** lime, aqua, ice blue, magenta, amber or ember red, cross-fading over the whole skin. The **ALBUM ART** option takes its colours from the cover of what's playing, in MONO (one colour) or MULTI (up to three);
   - **THEME:** light or dark chrome, the chrome's tint, and the colour of the headers and tabs.
 - **Seek bar.** It is built in, shows the track's whole waveform (Apple Lossless included), and follows the theme colour. The styles are bars, wave and LED.
+<img width="760" alt="Format icons: CD, CD with a disc scan, vinyl, cassette, 8-track, MiniDisc" src="https://raw.githubusercontent.com/embe-mb/foobar2000-Metalheart-Y2K/main/docs/v1.6/format-icons.png" />
+
 - **Media Library.** Browse by artist, album, genre or year, with a letter rail to jump through long lists. Albums sort A–Z, by year, at random, by date added or by record label. Click an artist or a label to see everything by them, and it remembers where you were. Connect a **Navidrome / Subsonic** server and its albums show up next to yours, playing straight from the server, and **PLAYLISTS** opens your Navidrome playlists.
 - **Saved playlists.** Right-click songs in Library Selection to build a playlist and keep it on the theme's own shelf (**Add to playlist ▸ New saved playlist…**, or **Save playlist…** on a tab). A saved playlist opens as a tab that saves every change by itself. **SAVED** opens the shelf in a Metalheart window to play, reopen, rename, delete or **export** them as `.m3u8` files, which are kept up to date too. Playlist tabs have a close button.
+- **Convert.** Right-click songs in Library Selection and choose **Convert…** to re-encode them to FLAC, MP3, AAC, ALAC, Opus, Ogg Vorbis, WavPack, APE or WAV, with tags, cover and artwork. The new album goes next to the original with the format swapped in its folder name (`[FLAC]` → `[MP3]`) or into a folder you pick. Drop the encoders (`ffmpeg.exe`, `flac.exe`, `lame.exe`…) into the theme's `encoders` folder; the window links to it.
 - **Track Info panel**, with a hi-fi push-button tab bar:
   - **Dossier:** release and credits from MusicBrainz tags (Discogs and VGMdb tags fill the gaps), the rip-log report for EAC, XLD, CUERipper, dBpoweramp, whipper and CUETools in its own log window, and MusicBrainz details.
-  - **Lyrics:** synced lyrics with word-by-word highlighting. OpenLyrics still does the searching, from a 2-pixel panel tucked under the tabs, because it only works while one of its own panels is on screen.
+  - **Lyrics:** synced lyrics with word-by-word highlighting. When a song has none yet, the theme searches **LRCLIB**, **NetEase** and **QQ Music** for synced lyrics itself, so they show up within seconds. OpenLyrics stays alongside it for manual searches, editing and plain lyrics (it runs from a 2-pixel panel tucked under the tabs, because it only works while one of its own panels is on screen).
   - **Artist Bio:** biography and discography; click an album to play it from your library or Navidrome.
   - **Tags**, and **MilkDrop** (about 900 public domain presets) in its own window.
-- **Updates itself.** The deck tells you when a new version is out and can download and install it for you. See the [changelog](CHANGELOG.md).
+- **Updates itself.** The deck tells you when a new version is out and can download and install it for you. Your settings are also backed up to a file and restored if foobar2000 ever loses them. See the [changelog](CHANGELOG.md).
 
 The full guide is in [`README - METALHEART Y2K.txt`](README%20-%20METALHEART%20Y2K.txt).
 

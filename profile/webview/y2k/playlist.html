@@ -111,7 +111,7 @@
   <div class="capsule"><span class="orb"></span><span id="plname">Playlist</span>
     <span class="right">
       <span id="meta"></span>
-      <input class="search" id="q" placeholder="Filter playlist…" spellcheck="false">
+      <input class="search" id="q" placeholder="Filter playlist…" spellcheck="false" autocomplete="off">
       <span class="ibtn on" id="follow" title="Keep the playing track in view">FOLLOW</span>
       <span class="ibtn" id="savedpl" title="Your saved playlists">SAVED</span>
       <span class="ibtn" data-cmd="Search" title="Search the media library (results open as a playlist)">SEARCH</span>
@@ -124,7 +124,8 @@
 <div class="viewport" id="vp" tabindex="0"><div class="spacer" id="sp"></div></div>
 <div class="toast" id="toast" hidden></div>
 
-<script src="common.js?v=29"></script><script>Y2K.scopeAccent(document.body, 2); /* MULTI album colours: accent channel 2 */</script>
+<script src="common.js?v=31"></script>
+<script src="convert.js?v=2"></script><script>Y2K.scopeAccent(document.body, 2); /* MULTI album colours: accent channel 2 */</script>
 <script>
 'use strict';
 const { H, esc, safe } = Y2K;
@@ -208,6 +209,8 @@ function tabs() {
       '<span class="x" title="' + (arm ? 'Not saved: click again to close it (right-click a tab > Save playlist… keeps it)' : 'Close this playlist') + '">' + (arm ? 'CLOSE?' : '✕') + '</span></div>';
   }
   h += '<div class="tab add" id="newpl" title="New playlist">+</div>';
+  if (h === $('tabs')._html) return;   // unchanged: keep the tabs (and the one under the pointer) as they are
+  $('tabs')._html = h;
   $('tabs').innerHTML = h;
   $('tabs').querySelectorAll('.tab[data-i]').forEach((t) => {
     const i = +t.dataset.i;
@@ -251,7 +254,7 @@ function freshName(base = 'New Playlist') {
 }
 function rename(tabEl, i) {
   const old = safe(() => H.getPlaylistName(i));
-  tabEl.innerHTML = '<input value="' + esc(old) + '">';
+  tabEl.innerHTML = '<input autocomplete="off" spellcheck="false" value="' + esc(old) + '">';
   const inp = tabEl.querySelector('input'); inp.focus(); inp.select();
   let finished = false;
   const done = (ok) => {
@@ -278,6 +281,7 @@ function rename(tabEl, i) {
 
 /* ------------------------------------------------ rendering (virtualised) */
 let renderQueued = false;
+let lastRowsHtml = '';
 function render() { if (!renderQueued) { renderQueued = true; requestAnimationFrame(doRender); } }
 function isSel(i) { if (!selCache.has(i)) selCache.set(i, !!safe(() => H.isPlaylistItemSelected(pl, i), false)); return selCache.get(i); }
 function rowAt(y) { let lo = 0, hi = tops.length - 1; while (lo < hi) { const m = (lo + hi + 1) >> 1; if (tops[m] <= y) lo = m; else hi = m - 1; } return lo; }
@@ -286,7 +290,7 @@ function doRender() {
   const vp = $('vp'), sp = $('sp');
   if (!rows.length) {
     sp.innerHTML = '<div class="empty"><div><b>' + (filter ? 'NO MATCHES' : 'EMPTY PLAYLIST') + '</b>' + (filter ? 'Nothing matches “' + esc(filter) + '”' : 'Double-click an album in the Media Library panel,<br>or use File &gt; Add files / Add folder in the menu bar<br><span class="ibtn" data-cmd="Configure">+ MUSIC FOLDERS</span>') + '</div></div>';
-    wireCmds(sp); return;
+    lastRowsHtml = ''; wireCmds(sp); return;
   }
   const y0 = vp.scrollTop, y1 = y0 + vp.clientHeight;
   let a = Math.max(0, rowAt(y0) - 6), b = Math.min(rows.length - 1, rowAt(y1) + 6);
@@ -310,6 +314,9 @@ function doRender() {
         '<span class="q">' + esc(it.q) + '</span><span class="a">' + esc(it.plays && it.plays !== '0' ? it.plays : '') + '</span><span>' + esc(it.len) + '</span></div>';
     }
   }
+  // nothing changed on screen: leave the rows alone (rebuilding them under the pointer made hovers and tooltips flicker)
+  if (h === lastRowsHtml && sp.firstElementChild) return;
+  lastRowsHtml = h;
   sp.innerHTML = h;
   sp.querySelectorAll('.cv[data-dir]').forEach((el) => {
     const d = el.dataset.dir; if (!d) return;
@@ -591,6 +598,8 @@ $('sp').addEventListener('contextmenu', async (e) => {
     ['Crop (keep only selection)', () => safe(() => H.removeUnselectedPlaylistItems(pl))],
     null,
     ['Open containing folder', () => it && Y2K.openFile(Y2K.toFwd(it.dir))],
+    null,
+    ['Convert…', () => Y2K.showConverter(Y2K.convertTracksOf(pl, sel)), 'Convert these songs to another format (MP3, FLAC, AAC, Opus …)'],
   ]);
 });
 
@@ -644,8 +653,11 @@ $('savedpl').onclick = () => openShelf(pl, false);
 const reload = Y2K.debounce(() => load(true), 150);
 const reloadAll = Y2K.debounce(() => load(false), 60);
 fb2k.on('playlist:activated', reloadAll);
-['playlist:itemsAdded', 'playlist:itemsRemoved', 'playlist:itemsReordered', 'playlist:itemsReplaced', 'playlist:itemsModified', 'playlist:itemsModifiedFromPlayback']
+['playlist:itemsAdded', 'playlist:itemsRemoved', 'playlist:itemsReordered', 'playlist:itemsReplaced', 'playlist:itemsModified']
   .forEach((ev) => fb2k.on(ev, (p) => { if (!p || p.playlist === undefined || p.playlist === pl) reload(); }));
+// play counts / ratings written by playback: nothing urgent, so wait for things to settle (cheap on big playlists)
+const reloadLazy = Y2K.debounce(() => load(true), 2500);
+fb2k.on('playlist:itemsModifiedFromPlayback', (p) => { if (!p || p.playlist === undefined || p.playlist === pl) reloadLazy(); });
 ['playlist:created', 'playlist:removed', 'playlist:renamed', 'playlist:reordered'].forEach((ev) => fb2k.on(ev, Y2K.debounce(() => { if (safe(() => H.activePlaylist, -1) !== pl) load(false); else { header(); } }, 80)));
 // any playlist's songs changing may need writing back to its saved playlist
 ['playlist:itemsAdded', 'playlist:itemsRemoved', 'playlist:itemsReordered', 'playlist:itemsReplaced']

@@ -54,7 +54,7 @@
 
 <script>/* inside the Track Info panel this page runs in a frame: use the panel's connection to foobar2000 */
 if (window.parent !== window) try { const P = window.parent; Object.defineProperty(window, 'chrome', { value: P.chrome, configurable: true, writable: true }); window.fb2k = P.fb2k; } catch (e) {}</script>
-<script src="common.js?v=29"></script>
+<script src="common.js?v=31"></script>
 <script>
 'use strict';
 const { esc, safe, H } = Y2K;
@@ -71,7 +71,8 @@ const isSynced = (t) => /\[\d+:\d+(?:[.:]\d+)?\]/.test(t || '');
 function readSources() {
   const base = Y2K.profileDir + '/lyrics/' + cur.lrcname;
   const found = [];
-  for (const ext of ['.lrc', '.txt']) { const t = Y2K.readText(base + ext); if (t && t.trim()) found.push([t, 'OPENLYRICS']); }
+  for (const ext of ['.lrc', '.txt']) { const t = Y2K.readText(base + ext); if (t && t.trim()) found.push([t, Y2K.lyricsSource(t) || 'OPENLYRICS']); }
+  const now = Y2K.lyricsNow(cur); if (now) found.push([now.text, now.src]);   // just fetched, file still being written
   if (cur._local) {
     const names = [cur.filename.replace(/\.[^.]+$/, ''), cur.lrcname].filter(Boolean).map((s) => s.toLowerCase());
     for (const f of Y2K.listDir(cur._dirFwd)) {
@@ -91,6 +92,11 @@ function load(force) {
   if (!fresh && !force && now < ly.next) return;
   ly.next = now + (ly.kind === 'none' ? 1500 : 3000);           // keep watching: OpenLyrics may still be saving, or you edited them
   const f = readSources();
+  // nothing synced on disk yet: search LRCLIB / NetEase / QQ Music now instead of waiting on OpenLyrics
+  if (!f || !isSynced(f[0])) {
+    const key = cur._key;
+    Y2K.lyricsFind(cur).then((r) => { if (r && cur && cur._key === key) { ly.next = 0; load(true); } });
+  }
   if (!f) { if (fresh) draw(); return; }
   if (f[0] === ly.raw) return;
   ly.raw = f[0]; ly.src = f[1];
@@ -115,7 +121,7 @@ function draw() {
   if (ly.kind === 'none') {
     lines.innerHTML = ''; rows = [];
     msg.innerHTML = Date.now() < ly.until
-      ? '<b>SEARCHING</b><div class="scan"></div>OpenLyrics is looking for the lyrics'
+      ? '<b>SEARCHING</b><div class="scan"></div>LRCLIB · NETEASE · QQ MUSIC'
       : '<b>NO LYRICS</b>None found for this track<div class="row"><span class="btn" data-cmd="Search for lyrics">SEARCH AGAIN</span><span class="btn" data-cmd="Search for lyrics (manually)">SEARCH MANUALLY</span></div>';
     msg.classList.remove('hidden');
     msg.querySelectorAll('[data-cmd]').forEach((b) => { b.onclick = () => olCmd(b.dataset.cmd); });
@@ -167,7 +173,7 @@ $('stage').addEventListener('wheel', (e) => {
 function olCmd(name) {
   if (!cur || !cur.path) return;
   Y2K.runFb2k('/context_command:"' + name + '" "' + cur.path + '"');
-  if (/^Search|Edit|instrumental/.test(name)) { ly.until = Date.now() + 120000; ly.next = 0; if (ly.kind === 'none') draw(); }
+  if (/^Search|Edit|instrumental/.test(name)) { ly.until = Date.now() + 120000; ly.next = 0; safe(() => { const m = JSON.parse(localStorage.getItem('y2k:lyrmiss') || '{}'); delete m[cur._key]; localStorage.setItem('y2k:lyrmiss', JSON.stringify(m)); }); if (ly.kind === 'none') draw(); }
 }
 const MENU = () => [
   ['hd', 'OPENLYRICS'],

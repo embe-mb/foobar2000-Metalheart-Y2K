@@ -31,6 +31,13 @@
   .sorts .opt:empty { display: none; }
   .search { flex: 1; min-width: 60px; height: 19px; border-radius: 10px; border: 1px solid var(--blue-5); padding: 0 8px 0 20px; outline: none; font: 11px var(--ui); color: #dfe7ef;
     background: #0b1016 url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='10' cy='10' r='6' fill='none' stroke='%2398a4b1' stroke-width='2.5'/><path d='M15 15l6 6' stroke='%2398a4b1' stroke-width='2.5'/></svg>") 5px center/11px no-repeat; box-shadow: inset 0 1px 3px rgba(0,0,0,.8); }
+  .qwrap { flex: 1; min-width: 60px; position: relative; display: flex; }
+  .qwrap .search { flex: 1; padding-right: 20px; }
+  .qx { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 13px; height: 13px; border-radius: 50%; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; font: 700 8px/1 var(--ui); font-style: normal; color: #0b1118;
+    background: linear-gradient(180deg, #dfe7ef, #8d98a4); box-shadow: 0 1px 1px rgba(0,0,0,.5); }
+  .qx:hover { background: linear-gradient(180deg, #fff, var(--lime-2)); }
+  .qx[hidden] { display: none; }
   .search:focus { border-color: var(--lime-3); box-shadow: inset 0 1px 3px rgba(0,0,0,.8), 0 0 6px var(--lime-glow); }
   .crumb { display: flex; align-items: center; gap: 6px; padding: 0 4px; min-height: 0; font: 700 11px var(--ui); color: #dbe4ee; }
   .crumb:empty { display: none; }
@@ -130,7 +137,7 @@
   <div class="capsule"><span class="orb"></span>Media Library<span class="right" id="meta"></span></div>
   <div class="bar">
     <div class="views" id="views"><span data-v="artists">ARTISTS</span><span data-v="albums">ALBUMS</span><span data-v="genres">GENRES</span><span data-v="years">YEARS</span></div>
-    <input class="search" id="q" placeholder="Search…" spellcheck="false">
+    <span class="qwrap"><input class="search" id="q" placeholder="Search…" spellcheck="false" autocomplete="off"><i class="qx" id="qx" title="Clear the search (Esc)" hidden>✕</i></span>
     <span class="plbtn" id="plBtn" hidden title="Your playlists on the Navidrome server">PLAYLISTS</span>
   </div>
   <div class="sorts" id="sorts" hidden><span data-s="all">ALL</span><span data-s="year">YEAR</span><span data-s="random">RANDOM</span><span data-s="added">RECENTLY ADDED</span><span data-s="label">RECORD LABEL</span><span class="opt" id="sopt"></span></div>
@@ -138,7 +145,7 @@
 </div>
 <div class="main"><div class="ndsheet" id="ndSheet" hidden></div><div class="jump" id="rail"></div><div class="body" id="body"><div class="empty loading"><b>SCANNING…</b>Reading your media library</div></div></div>
 
-<script src="common.js?v=29"></script><script>Y2K.scopeAccent(document.body, 1); /* MULTI album colours: accent channel 1 */</script>
+<script src="common.js?v=31"></script><script>Y2K.scopeAccent(document.body, 1); /* MULTI album colours: accent channel 1 */</script>
 <script>
 'use strict';
 const { H, esc, safe } = Y2K;
@@ -444,8 +451,8 @@ function ndSheet(open) {
   const c = Y2K.ndCfg();
   const status = !c ? '' : ndState === 'ok' ? 'CONNECTED · ' + ndList.length.toLocaleString() + ' ALBUMS ON THE SERVER' : ndState === 'error' ? ('PROBLEM: ' + ndErr).toUpperCase() : ndState === 'loading' ? 'READING THE SERVER…' : '';
   el.innerHTML = '<div class="hd">NAVIDROME / SUBSONIC SERVER</div>' +
-    '<label for="ndUrl">Server</label><input id="ndUrl" type="text" spellcheck="false" placeholder="192.168.1.10:4533" value="' + esc(c ? c.url : '') + '">' +
-    '<label for="ndUser">User</label><input id="ndUser" type="text" spellcheck="false" value="' + esc(c ? c.user : '') + '">' +
+    '<label for="ndUrl">Server</label><input id="ndUrl" type="text" spellcheck="false" autocomplete="off" placeholder="192.168.1.10:4533" value="' + esc(c ? c.url : '') + '">' +
+    '<label for="ndUser">User</label><input id="ndUser" type="text" spellcheck="false" autocomplete="off" value="' + esc(c ? c.user : '') + '">' +
     '<label for="ndPass">Password</label><input id="ndPass" type="password" placeholder="' + (c ? '(saved, type to change)' : '') + '">' +
     '<label class="chk full"><input type="checkbox" id="ndShow"' + (ndOpt.show ? ' checked' : '') + '>Show the server\'s albums in the Media Library</label>' +
     '<label class="chk full"><input type="checkbox" id="ndDupes"' + (ndOpt.dupes ? ' checked' : '') + '>Also show server albums I already have on this computer</label>' +
@@ -531,7 +538,7 @@ function render() {
   }
   $('plBtn').classList.toggle('on', onPlaylists());
   $('q').placeholder = onPlaylists() ? 'Search playlists…' : 'Search…';
-  if (document.activeElement !== $('q')) $('q').value = top && top.type === 'search' ? top.value : query;
+  if (document.activeElement !== $('q')) $('q').value = top && top.type === 'search' ? top.value : query; qSync();
   rendered = true;
   draw();
   restorePos();
@@ -691,12 +698,20 @@ function renderGrid(list, head) {
   }
   h += '</div>';
   $('body').innerHTML = h;
+  // covers load as cards come near the view; a card scrolled past before its turn is skipped and asked for again
+  // when it comes back (so flicking through thousands of albums doesn't leave a long queue behind)
   const io = new IntersectionObserver((ents) => ents.forEach((en) => {
-    if (!en.isIntersecting) return;
-    io.unobserve(en.target);
     const el = en.target;
-    if (el.dataset.cover !== undefined) { ndArt(el, el.dataset.cover, 200); return; }
-    Y2K.thumb(Y2K.toFwd(el.dataset.dir), 160, el.dataset.track).then((u) => { if (u) { el.style.backgroundImage = 'url("' + u + '")'; const p = el.querySelector('.ph'); if (p) p.remove(); } });
+    el._near = en.isIntersecting;
+    if (!en.isIntersecting || el._asked) return;
+    if (el.dataset.cover !== undefined) { io.unobserve(el); ndArt(el, el.dataset.cover, 200); return; }
+    el._asked = true;
+    Y2K.thumb(Y2K.toFwd(el.dataset.dir), 160, el.dataset.track, () => el._near && el.isConnected).then((u) => {
+      el._asked = false;
+      if (u === null) return;               // skipped: still observed
+      io.unobserve(el);
+      if (u) { el.style.backgroundImage = 'url("' + u + '")'; const p = el.querySelector('.ph'); if (p) p.remove(); }
+    });
   }), { root: $('body'), rootMargin: '300px' });
   $('body').querySelectorAll('.cv[data-dir]').forEach((el) => io.observe(el));
   $('body').querySelectorAll('.letter[data-open]').forEach((el) => { el.onclick = () => openLabel(el.dataset.open); });
@@ -820,6 +835,11 @@ $('sopt').onclick = () => go(() => {
   else if (sort === 'random') seed = newSeed();
 });
 // typing goes back to the list being searched: the playlists (inside PLAYLISTS), else the albums
+// the clear button: shown while there's something typed; clears and runs the empty search straight away (Esc does too)
+function qSync() { const x = document.getElementById('qx'); if (x) x.hidden = !document.getElementById('q').value; }
+$('q').addEventListener('input', qSync);
+$('qx').addEventListener('click', () => { $('q').value = ''; qSync(); $('q').dispatchEvent(new Event('input')); $('q').focus(); });
+$('q').addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('q').value) { e.preventDefault(); $('qx').click(); } });
 $('q').addEventListener('input', Y2K.debounce(() => go(() => { query = $('q').value; stack = onPlaylists() ? [stack[0]] : stack.filter((s) => s.type !== 'album' && s.type !== 'search'); }), 200));
 // PLAYLISTS opens / closes the server's playlists (read again on every open; the last list shows meanwhile)
 $('plBtn').onclick = () => {
@@ -832,7 +852,7 @@ $('q').addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   const top = top_();
   go(() => { if (top && top.type === 'search') stack.pop(); else query = ''; });
-  $('q').value = '';
+  $('q').value = ''; qSync();
 });
 document.addEventListener('mouseup', (e) => { if (e.button === 3 && stack.length) back(); });
 $('body').addEventListener('scroll', Y2K.debounce(savePos, 150), { passive: true });
