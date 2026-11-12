@@ -3,15 +3,19 @@
 
 A **foobar2000** theme with a chrome, steel-blue and toxic-lime look. It is built with Columns UI and WebView2 HTML panels.
 
-### ▶ Watch the demo (54 s, WebM)
-[demo.webm](https://github.com/user-attachments/assets/306fbc62-f122-443c-9090-d0fe6273c32d)
+### ▶ Watch the v1.6 demo (70 s, WebM, no sound)
+[<img width="880" alt="METALHEART // Y2K v1.6 demo: 宇多田ヒカル – COLORS on the deck with the REACTOR centerpiece" src="docs/v1.6/demo-poster.jpg" />](docs/demo-v1.6.webm)
 
-The demo shows the default theme playing a synthetic test track. It goes through:
-- the liquid orb, synced lyrics and spectrum;
-- the TOWERS and HELIX centerpieces;
-- the digital rain and retro grid backgrounds;
-- theme colours and album-art colours;
-- the waveform seek bar styles and the lyrics tab.
+The new demo plays real albums by artists who write in different scripts, to show that titles, tags, country flags and synced lyrics work in any language: **宇多田ヒカル** and **ゴダイゴ** (Japanese), **羅大佑** (Chinese), **Vitas** (Russian), **坂本龍一** (Japanese, on vinyl) and **최진희** (Korean). It goes through:
+- synced lyrics in every script, found by the theme itself on LRCLIB, NetEase and QQ Music, on the deck and in the word-by-word LYRICS tab;
+- the PYRAMID, CUBE and REACTOR centerpieces, switched by double-clicking;
+- the Media Library sorted by record label and by year, and an album opened from the label view;
+- theme colours taken from the album art, the VCR tape counter and the pod games;
+- format icons: a 12" record with a tonearm that tracks across it, and a 7" single;
+- the THEME tab's dark chrome, with the chrome and headers tinted to match;
+- the verified CD RIP badge read from the EAC log, and the artist list with its letter rail.
+
+The [first demo](https://github.com/user-attachments/assets/306fbc62-f122-443c-9090-d0fe6273c32d) (54 s) shows the ORB, TOWERS and HELIX centerpieces, the digital rain and retro grid backgrounds and the waveform seek bar styles.
 
 foobar2000 itself is **not included**. Install it first from [foobar2000.org](https://www.foobar2000.org/download). The standard installer and the portable option both work.
 
