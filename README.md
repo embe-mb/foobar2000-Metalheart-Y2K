@@ -7,7 +7,7 @@ A **foobar2000** theme with a chrome, steel-blue and toxic-lime look. It is buil
 
 [demo-v1.6.webm](https://github.com/user-attachments/assets/fb0f2270-81fb-44a4-a100-6dd7e01de1cc)
 
-[<img width="880" alt="METALHEART // Y2K v1.6 demo: 宇多田ヒカル – COLORS on the deck with the REACTOR centerpiece" src="docs/v1.6/demo-poster.jpg" />]
+<img width="880" alt="METALHEART // Y2K v1.6 demo: 宇多田ヒカル – COLORS on the deck with the REACTOR centerpiece" src="docs/v1.6/demo-poster.jpg" />
 
 
 The new demo plays real albums by artists who write in different scripts, to show that titles, tags, country flags and synced lyrics work in any language: **宇多田ヒカル** and **ゴダイゴ** (Japanese), **羅大佑** (Chinese), **Vitas** (Russian), **坂本龍一** (Japanese, on vinyl) and **최진희** (Korean). It goes through:
