@@ -72,7 +72,7 @@
 
 <script>/* inside the Track Info panel this page runs in a frame: use the panel's connection to foobar2000 */
 if (window.parent !== window) try { const P = window.parent; Object.defineProperty(window, 'chrome', { value: P.chrome, configurable: true, writable: true }); window.fb2k = P.fb2k; } catch (e) {}</script>
-<script src="common.js?v=31"></script>
+<script src="common.js?v=47"></script>
 <script>
 'use strict';
 const { esc, safe } = Y2K;
@@ -108,9 +108,9 @@ function render() {
     root.innerHTML = '<div class="empty"><b>NO SIGNAL</b>Play or select a track to read its dossier</div>';
     return;
   }
-  const art = Y2K.resolveArt(t, (a) => {   // a Navidrome stream's cover arrives a moment later
+  const art = Y2K.resolveArt(t, (a) => {   // a cover still being made (or a Navidrome stream's) arrives a moment later
     const th = cur === t && document.querySelector('.hero .thumb');
-    if (th) th.style.backgroundImage = "url('" + a.src + "')";
+    if (th && a.src) th.style.backgroundImage = "url('" + a.src + "')";
   });
   const q = Y2K.qualityOf(t);
   let h = '';

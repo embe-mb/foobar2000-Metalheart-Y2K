@@ -124,7 +124,7 @@
 <div class="viewport" id="vp" tabindex="0"><div class="spacer" id="sp"></div></div>
 <div class="toast" id="toast" hidden></div>
 
-<script src="common.js?v=31"></script>
+<script src="common.js?v=47"></script>
 <script src="convert.js?v=2"></script><script>Y2K.scopeAccent(document.body, 2); /* MULTI album colours: accent channel 2 */</script>
 <script>
 'use strict';
@@ -136,7 +136,7 @@ const RH = 24, GH = 58;
 const F = ['$if2(%album artist%,%artist%)', '%album%', "$year($if3($meta(originaldate),%date%,))", '%title%', '%artist%',
   '%tracknumber%', '%discnumber%', '%totaldiscs%', '%length%', '%length_seconds%',
   "$if($stricmp($info(encoding),lossless),%codec% $info(bitspersample)/$replace($div(%samplerate%,1000).$left($mod(%samplerate%,1000),1),.0,),%codec%[ %bitrate%k])",
-  '%play_count%', '%path%', '%subsong%', '$directory_path(%path%)', "$meta(label,0)", '$meta(releasecountry)', '%date%'];
+  '%play_count%', '%path%', '%subsong%', '$directory_path(%path%)', "$meta(label,0)", '$meta(releasecountry)', '%date%', '%codec%'];
 const SCRIPT = F.map((x) => '[' + x + ']').join('$char(30)');
 
 let pl = -1, items = [], rows = [], tops = [], total = 0, filter = '';
@@ -144,7 +144,33 @@ let lastPl = -1, focus = -1, anchor = -1, follow = true, nowKey = '', playingIdx
 const selCache = new Map();
 
 /* ------------------------------------------------ data */
-function load(keepScroll) {
+/* Library Selection being refilled by the Media Library (Y2K.FILLING, set by loadPaths): the rows on screen stay
+   as they are until the whole album has arrived, then the new list comes in at once with a short fade, instead of
+   emptying, showing the first track and then the rest. */
+let held = null, heldT = 0;
+function filling(i) {
+  const f = safe(() => JSON.parse(localStorage.getItem(Y2K.FILLING) || 'null'), null);
+  if (!f || !(Date.now() - f.t < 5000) || i < 0 || safe(() => H.getPlaylistName(i), '') !== f.name) return null;
+  return safe(() => H.getPlaylistItemCount(i), 0) < f.n ? f : null;
+}
+function release() { if (!held) return; const k = held.keep; held = null; clearTimeout(heldT); load(k, true); }
+function hold(f, keep) {
+  held = { keep: held ? held.keep && keep : keep, n: f.n, name: f.name };
+  clearTimeout(heldT); heldT = setTimeout(release, Math.max(200, f.t + 5000 - Date.now()));   // never longer than 5 s
+}
+// the Media Library says so as it starts (before the list is emptied), and again when the last track is in
+window.addEventListener('storage', (e) => {
+  if (e.key !== Y2K.FILLING) return;
+  const f = safe(() => JSON.parse(e.newValue || 'null'), null);
+  if (f) hold(f, false); else release();
+});
+function load(keepScroll, fade) {
+  const f = filling(safe(() => H.activePlaylist, -1));
+  if (f) {
+    hold(f, keepScroll);
+    return;
+  }
+  if (held) { held = null; clearTimeout(heldT); fade = true; keepScroll = false; }
   pl = safe(() => H.activePlaylist, -1);
   const cnt = safe(() => H.playlistCount, 0);
   if (pl < 0 && cnt > 0) { pl = Math.min(lastPl < 0 ? 0 : lastPl, cnt - 1); safe(() => { H.activePlaylist = pl; }); }
@@ -159,7 +185,8 @@ function load(keepScroll) {
         const v = s.split(SEPC);
         return { i, aa: v[0], album: v[1], year: v[2], title: v[3], artist: v[4], trk: v[5], disc: v[6], tdisc: v[7], len: v[8], lens: +v[9] || 0,
           q: v[10], plays: v[11], path: v[12], sub: v[13], dir: v[14], label: Y2K.clean(v[15]), cc: v[16], date: v[17],
-          gkey: (v[0] + '|' + v[1] + '|' + v[2] + '|' + (+v[7] > 1 ? v[6] : '')).toLowerCase(), lc: (v[3] + ' ' + v[4] + ' ' + v[0] + ' ' + v[1]).toLowerCase() };
+          // one group per album and folder (CD1 / Disc 2 subfolders count as one), whatever the files' formats
+          gkey: (v[0] + '|' + v[1] + '|' + v[2] + '|' + (+v[7] > 1 ? v[6] : '') + '|' + albumDir(v[14])).toLowerCase(), codec: v[18] || '', lc: (v[3] + ' ' + v[4] + ' ' + v[0] + ' ' + v[1]).toLowerCase() };
       });
     }
   }
@@ -170,8 +197,10 @@ function load(keepScroll) {
   updatePlaying(true);
   header();
   render();
+  if (fade) { if (focus >= 0) ensureVisible(focus); renderQueued = false; doRender(); $('sp').animate([{ opacity: 0 }, { opacity: 1 }], { duration: 180, easing: 'ease-out' }); }
 }
 
+const albumDir = (d) => String(d || '').replace(/[\\/](cd|disc|disk)[ _-]?\d+[^\\/]*$/i, ''); // as the Media Library's
 function buildRows() {
   rows = []; tops = []; total = 0;
   const f = filter.toLowerCase().trim();
@@ -179,9 +208,9 @@ function buildRows() {
   for (const it of items) {
     if (f && !it.lc.includes(f)) continue;
     if (!g || g.key !== it.gkey) {
-      g = { key: it.gkey, aa: it.aa, album: it.album, year: it.year, dir: it.dir, label: it.label, cc: it.cc, q: it.q, disc: +it.tdisc > 1 ? it.disc : '', first: it.i, n: 0, secs: 0, members: [] };
+      g = { key: it.gkey, aa: it.aa, album: it.album, year: it.year, dir: it.dir, label: it.label, cc: it.cc, q: it.q, codec: it.codec, disc: +it.tdisc > 1 ? it.disc : '', first: it.i, n: 0, secs: 0, members: [] };
       rows.push({ g }); tops.push(total); total += GH;
-    }
+    } else if (it.codec.toLowerCase() !== g.codec.toLowerCase()) g.q = 'MULTI FORMAT'; // e.g. FLAC + MP3 files of one album in one folder
     g.n++; g.secs += it.lens; g.members.push(it.i);
     rows.push({ it }); tops.push(total); total += RH;
   }
@@ -604,11 +633,12 @@ $('sp').addEventListener('contextmenu', async (e) => {
 });
 
 /* ------------------------------------------------ now playing */
-function updatePlaying(quiet) {
-  const playing = safe(() => H.isPlaying, false);
-  document.body.classList.toggle('paused', safe(() => H.isPaused, false));
-  const key = playing ? safe(() => H.nowPlaying('[%path%]|[%subsong%]')) : '';
-  const onThis = playing && safe(() => H.playingPlaylist, -2) === pl;
+// st: the playback state when the caller already has it (the timer reads it through the asynchronous host object)
+function updatePlaying(quiet, st) {
+  const playing = st ? st.playing : safe(() => H.isPlaying, false);
+  document.body.classList.toggle('paused', st ? st.paused : safe(() => H.isPaused, false));
+  const key = st ? st.key : playing ? safe(() => H.nowPlaying('[%path%]|[%subsong%]')) : '';
+  const onThis = playing && (st ? st.pl : safe(() => H.playingPlaylist, -2)) === pl;
   const set = new Set();
   if (onThis && key) for (const it of items) if (it.path + '|' + it.sub === key) set.add(it.i);
   const changed = key !== nowKey || set.size !== playingIdx.size || [...set].some((i) => !playingIdx.has(i));
@@ -654,7 +684,16 @@ const reload = Y2K.debounce(() => load(true), 150);
 const reloadAll = Y2K.debounce(() => load(false), 60);
 fb2k.on('playlist:activated', reloadAll);
 ['playlist:itemsAdded', 'playlist:itemsRemoved', 'playlist:itemsReordered', 'playlist:itemsReplaced', 'playlist:itemsModified']
-  .forEach((ev) => fb2k.on(ev, (p) => { if (!p || p.playlist === undefined || p.playlist === pl) reload(); }));
+  .forEach((ev) => fb2k.on(ev, (p) => {
+    if (held) {   // the last track in: swap now
+      if (ev === 'playlist:itemsAdded' && p && p.playlist !== undefined) {
+        const n = p.start !== undefined && p.items ? p.start + p.items.length : safe(() => H.getPlaylistItemCount(p.playlist), 0);
+        if (n >= held.n && safe(() => H.getPlaylistName(p.playlist), '') === held.name) release();
+      }
+      return;
+    }
+    if (!p || p.playlist === undefined || p.playlist === pl) reload();
+  }));
 // play counts / ratings written by playback: nothing urgent, so wait for things to settle (cheap on big playlists)
 const reloadLazy = Y2K.debounce(() => load(true), 2500);
 fb2k.on('playlist:itemsModifiedFromPlayback', (p) => { if (!p || p.playlist === undefined || p.playlist === pl) reloadLazy(); });
@@ -665,11 +704,22 @@ fb2k.on('playlist:itemsModifiedFromPlayback', (p) => { if (!p || p.playlist === 
     if (p && p.playlist !== undefined) scheduleSync(p.playlist);
     else for (let k = 0, n = safe(() => H.playlistCount, 0); k < n; k++) if (savedByName(safe(() => H.getPlaylistName(k), ''))) scheduleSync(k);
   }));
-fb2k.on('playlist:selectionChanged', (p) => { if (!p || p.playlist === pl) { selCache.clear(); render(); } });
-fb2k.on('playlist:focusChanged', (p) => { if (p && p.playlist === pl && p.to !== focus) { focus = p.to; render(); } });
-fb2k.on('playlist:ensureVisible', (p) => { if (p && p.playlist === pl) ensureVisible(p.item); });
+// (while a refill is held, the rows on screen are the old list's: these wait for the swap)
+fb2k.on('playlist:selectionChanged', (p) => { if (!held && (!p || p.playlist === pl)) { selCache.clear(); render(); } });
+fb2k.on('playlist:focusChanged', (p) => { if (!held && p && p.playlist === pl && p.to !== focus) { focus = p.to; render(); } });
+fb2k.on('playlist:ensureVisible', (p) => { if (!held && p && p.playlist === pl) ensureVisible(p.item); });
 ['playback:trackChanged', 'playback:starting', 'playback:stopped', 'playback:paused'].forEach((ev) => fb2k.on(ev, Y2K.debounce(() => updatePlaying(false), 100)));
-setInterval(() => updatePlaying(false), 1500);
+// (asked through Y2K's asynchronous host object: a busy foobar2000 never holds this panel's frames up)
+let askingPlay = false;
+setInterval(async () => {
+  if (askingPlay || document.hidden) return;
+  askingPlay = true;
+  try {
+    const HA = chrome.webview.hostObjects.foo_uie_webview, playing = !!(await HA.isPlaying);
+    const st = { playing, paused: !!(await HA.isPaused), key: playing ? String(await HA.nowPlaying('[%path%]|[%subsong%]') || '') : '', pl: playing ? +(await HA.playingPlaylist) : -2 };
+    updatePlaying(false, st);
+  } catch (e) {} finally { askingPlay = false; }
+}, 1500);
 document.addEventListener('dragover', (e) => e.preventDefault());
 document.addEventListener('drop', (e) => e.preventDefault());
 load(false);

@@ -146,7 +146,9 @@
           ice blue, magenta, amber, ember red), cross-fading to the new
           colour. The rainbow swatch is ALBUM ART: the colours come from the
           cover of what you're playing and fade to the next cover's on every
-          new album. MONO uses the cover's main colour everywhere; MULTI uses
+          new album (a straight cross-fade, once the new title is in; the
+          skin is redrawn once and the blend is done by the graphics card,
+          so the visualisers keep their frame rate). MONO uses the cover's main colour everywhere; MULTI uses
           up to three of its colours (screen + info tabs / centerpiece,
           spectrum + media library / control pod + playlist). "APPLY TO LYRICS PANEL"
           gives the native OpenLyrics highlight the same colour.
@@ -195,9 +197,13 @@
     Click an artist's name anywhere (here or in Library Selection) to see
     everything they're on, and a label's name on an album page for that
     label. Each view remembers where you were, even after a restart.
+    An album whose files are in more than one format (FLAC and MP3 tracks
+    in the same folder, tagged as the same album) is one album, shown as
+    MULTI FORMAT; copies in separate folders stay separate versions.
     Click an album for its tracklist and PLAY / + ADD / NEW PLAYLIST / FOLDER.
     Double-click a cover or track to load it into "Library Selection" without
-    interrupting what's playing, then double-click it there to play. PLAY
+    interrupting what's playing, then double-click it there to play (the
+    list there swaps to the new album in one go once all of it is in). PLAY
     starts the album straight away. Right-click a cover for more.
     "Library Selection" is a separate playlist, so your own playlists are
     never overwritten. Covers come from the album folder, or from the art
@@ -208,7 +214,8 @@
     right-click for rename/duplicate/save/close, ✕ or middle-click to close,
     + for new). Closing a playlist with songs that isn't saved asks first
     (the tab turns red: CLOSE?).
-    Album groups with cover, label, country flag, format and running time.
+    Album groups with cover, label, country flag, format and running time
+    (MULTI FORMAT when an album's tracks in one folder are in several formats).
     Click / Ctrl+click / Shift+click to select, double-click or Enter to play,
     Delete to remove, Ctrl+A select all, Ctrl+F filter. Right-click a track for
     queue / send to new playlist / crop / open folder / Convert…. Send to new playlist
@@ -220,7 +227,9 @@
     name, and every song you add, remove or move there is saved by itself.
     EXPORT… in the shelf writes an .m3u8 file, rewritten after each change.
     SAVED opens the shelf in its
-    own window: play, add, open as a playlist again, rename or delete. Saved
+    own window: play, add, open as a playlist again, rename or delete. PLAY
+    opens it in a tab named after it (the same tab again if it's open) and
+    leaves Library Selection alone. Saved
     playlists keep their order and repeats, and outlive the foobar2000
     playlist they came from. Files can't be dragged from Explorer onto this panel — use
     File > Add files / Add folder in the menu bar, or the library.
@@ -283,6 +292,46 @@
     Your deck and panel settings are also copied to
     <settings folder>\y2k-settings.json and put back by themselves if
     foobar2000 ever loses them (after a crash, for example).
+
+
+---------------------------------------------------------------------
+ METALHEART (THE LAUNCHER) + STARTUP SPLASH
+---------------------------------------------------------------------
+  Start the player with Metalheart (the Metalheart shortcut on the Desktop or
+  in the Start menu; the program is profile\webview\y2k\splash\Metalheart.exe).
+  It covers the window on black with the animated logo - chrome sheen and
+  lens flare on a loop - while the panels load, then fades away once every
+  panel has drawn. Click it or press Esc to skip. If foobar2000 is already
+  running it simply brings it the files or command you gave it.
+
+  The theme ships Metalheart as its source code, not as a program: the
+  installer (and so every update) builds Metalheart.exe on your PC with the
+  C# compiler that comes with Windows, so nothing is downloaded. With
+  "Metalheart shortcuts" ticked (the default) it also makes the Desktop and
+  Start menu shortcuts and registers Metalheart with Windows. Installed by
+  hand (drag and drop)? Run this once to do the same:
+     powershell -ExecutionPolicy Bypass -File "<settings folder>\webview\y2k\splash\src\build.ps1" -Shortcuts
+
+  Music files: Metalheart is registered (for your user only) as a music
+  player for the common audio types (mp3, flac, m4a, ogg, opus, wav, wma,
+  ape, wv, aiff, dsf ...) and playlists (m3u, m3u8, pls, cue, fpl ...).
+  Windows won't let a program make itself the default, so pick it
+  yourself: Settings > Apps > Default apps > Metalheart, then choose it
+  for each type (or right-click a file > Open with > Choose another app >
+  Metalheart > Always). Files then open through the splash, or go straight
+  to the player if it's already running.  Metalheart.exe --unregister
+  takes it back out of the list; --register puts it back.
+
+  Taskbar: pin Metalheart (right-click it in the Start menu > Pin to
+  taskbar, or right-click the running player's taskbar button > Pin to
+  taskbar). The pin and the running player are ONE button with the
+  Metalheart icon: the theme gives foobar2000's window the Metalheart
+  taskbar identity each time it starts, however it was started. An older
+  pin of foobar2000.exe itself would sit beside it as a second icon, so
+  unpin that one.
+
+  Started as foobar2000.exe there is no splash (the taskbar grouping still
+  applies). Rebuild after editing: splash\src\build.ps1 (or build.cmd).
 
 
 ---------------------------------------------------------------------

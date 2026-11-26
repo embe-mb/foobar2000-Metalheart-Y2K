@@ -670,7 +670,7 @@
   </div>
 
   <div class="lcd main-lcd">
-    <canvas class="lcdfx" id="lcdfx"></canvas>
+    <canvas class="lcdfx" id="lcdfx" data-fade="ghost"></canvas>
     <div class="lcd-top">
       <div class="ltl">
         <div class="state"><i></i><svg class="reel" id="reel" viewBox="-10 -10 20 20"><path fill-rule="evenodd" d="M9.6 0A9.6 9.6 0 1 0 -9.6 0A9.6 9.6 0 1 0 9.6 0ZM0.00 -3.10L-4.41 -6.79Q0.00 -8.90 4.41 -6.79ZM2.68 1.55L8.09 -0.42Q7.71 4.45 3.68 7.22ZM-2.68 1.55L-3.68 7.22Q-7.71 4.45 -8.09 -0.42ZM1.4 0A1.4 1.4 0 1 0 -1.4 0A1.4 1.4 0 1 0 1.4 0Z"/></svg><span id="state">NO DISC</span></div>
@@ -755,7 +755,7 @@
   </div>
 </div>
 
-<script src="common.js?v=31"></script>
+<script src="common.js?v=47"></script>
 <script>
 /* ---------------- fitting the deck to its window ----------------
    The deck is laid out for a strip about 420 px high. In a narrow window (e.g. on a vertical monitor) the cover
@@ -1234,45 +1234,78 @@ function karaokeTick() {
 }
 
 function showArt(a) {
+  if (a.pending) return;   // its display copy is being made (Y2K.resolveArt calls back): the cover shown stays until then
   const img = $('art');
   if (a.src) { img.src = a.src; img.classList.remove('hidden'); $('noart').classList.add('hidden'); }
   else { img.removeAttribute('src'); img.classList.add('hidden'); $('noart').classList.remove('hidden'); }
   mediaArt = a.src || ''; paintMediaArt();
-  if (a.src) readCoverColours(a.src, cur ? cur._key : '');
+  if (a.src) readCoverColours(a.src, cur ? cur._key : '', coverMemoKey(cur, a));
 }
 
 /* ALBUM ART theme: the cover's most vivid colours, ranked by how much of the cover they cover (weighted by
-   vividness). Up to three hues at least ~45 degrees apart; a monochrome cover gives a silver theme. */
-let coverSeq = 0;
-function readCoverColours(src, key) {
-  const my = ++coverSeq, im = new Image();
-  im.onload = () => {
+   vividness). Up to three hues at least ~45 degrees apart; a monochrome cover gives a silver theme.
+   Speed: a cover's colours never change, so they are worked out once and remembered, in memory by the image itself
+   and across sessions per album (folder + art file + album, 'deck:palMemo'). A known album starts its colour fade in
+   the same frame its cover appears; a pause / resume (which re-renders the deck) costs nothing. A new cover is read
+   from the deck's own <img>, which the browser decodes off the main thread anyway, so a big cover isn't decoded twice. */
+let coverSeq = 0, coverLastSrc = '';
+const coverMem = new Map(); // src -> accents (the src strings are already held by the art cache)
+const PALMEMO = 'deck:palMemo', PALMEMO_MAX = 400;
+let palMemo = safe(() => JSON.parse(localStorage.getItem(PALMEMO)), null) || {};
+const coverMemoKey = (t, a) => t && t._local && a.origin && a.origin !== 'embedded' && a.origin !== 'none' ? [t.dir, a.origin, t.album || ''].join('|') : '';
+function rememberCover(src, mk, acc) {
+  coverMem.set(src, acc);
+  if (coverMem.size > 64) coverMem.delete(coverMem.keys().next().value);
+  if (!mk) return;
+  delete palMemo[mk]; palMemo[mk] = acc; // re-inserted = most recently used
+  const ks = Object.keys(palMemo);
+  if (ks.length > PALMEMO_MAX) ks.slice(0, ks.length - PALMEMO_MAX).forEach((k) => delete palMemo[k]);
+  safe(() => localStorage.setItem(PALMEMO, JSON.stringify(palMemo)));
+}
+function coverAccents(im) {
+  const S = 48, c = document.createElement('canvas'); c.width = c.height = S;
+  const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(im, 0, 0, S, S);
+  const d = g.getImageData(0, 0, S, S).data, W = new Float64Array(24), R = new Float64Array(24), G = new Float64Array(24), B = new Float64Array(24);
+  let grey = 0, vivid = 0;
+  for (let k = 0; k < d.length; k += 4) { // rgb -> hsl inline: no arrays per pixel
+    const r = d[k], gg = d[k + 1], b = d[k + 2], mx = Math.max(r, gg, b), mn = Math.min(r, gg, b), l = (mx + mn) / 510;
+    if (l < 0.08 || l > 0.96) continue;
+    const dl = (mx - mn) / 255, sat = dl ? dl / (1 - Math.abs(2 * l - 1)) : 0, v = sat * (1 - Math.abs(l - 0.5) * 1.5);
+    if (sat < 0.2 || v < 0.08) { grey++; continue; }
+    vivid++;
+    const h6 = mx === r ? ((gg - b) / (mx - mn)) % 6 : mx === gg ? (b - r) / (mx - mn) + 2 : (r - gg) / (mx - mn) + 4;
+    const bi = Math.floor(((h6 * 60 + 360) % 360) / 15) % 24;
+    W[bi] += v; R[bi] += r * v; G[bi] += gg * v; B[bi] += b * v;
+  }
+  const order = [...W.keys()].filter((i) => W[i] > 0).sort((a, b) => W[b] - W[a]), total = order.reduce((n, i) => n + W[i], 0), picks = [];
+  for (const i of order) {
+    if (picks.length === 3 || (picks.length && W[i] < total * 0.03)) break;
+    if (picks.every((q) => { const dd = Math.abs(q - i); return Math.min(dd, 24 - dd) >= 3; })) picks.push(i);
+  }
+  let acc = vivid > grey * 0.06 ? picks.map((i) => Y2K.specFor([R[i] / W[i], G[i] / W[i], B[i] / W[i]])) : [];
+  if (!acc.length) acc = [{ h: 210, s: 0.08, l: 0.45 }]; // black & white / grey cover: silver
+  while (acc.length < 3) { const a0 = acc[0]; acc.push({ h: (a0.h + (acc.length === 1 ? 40 : 320)) % 360, s: a0.s, l: a0.l }); }
+  return acc;
+}
+// content first, then colour: a colour change waits for the new title to finish decoding, so the still picture the
+// colour fade starts from never holds a half-scrambled title (common.js, fadeDom)
+function afterTitle(fn) { if (!decoding) return fn(); requestAnimationFrame(() => afterTitle(fn)); }
+function readCoverColours(src, key, mk = '') {
+  if (!src) return;
+  const known = coverMem.get(src) || (mk && palMemo[mk]);
+  if (known) { // instant: no decode, no pixels
+    const my = ++coverSeq; coverLastSrc = src;
+    if (!coverMem.has(src)) coverMem.set(src, known);
+    afterTitle(() => { if (my === coverSeq) Y2K.setAlbumPalette(key, known); });
+    return;
+  }
+  if (src === coverLastSrc) return; // this cover is being read already
+  const my = ++coverSeq; coverLastSrc = src;
+  const art = $('art'), im = art && art.getAttribute('src') === src ? art : Object.assign(new Image(), { decoding: 'async', src });
+  im.decode().then(() => {
     if (my !== coverSeq) return;
-    try {
-      const S = 48, c = document.createElement('canvas'); c.width = c.height = S;
-      const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(im, 0, 0, S, S);
-      const d = g.getImageData(0, 0, S, S).data, bins = Array.from({ length: 24 }, (_, i) => ({ i, w: 0, r: 0, g: 0, b: 0 }));
-      let grey = 0, vivid = 0;
-      for (let k = 0; k < d.length; k += 4) {
-        const rgb = [d[k], d[k + 1], d[k + 2]], [h, sat, l] = Y2K.rgb2hsl(rgb);
-        if (l < 0.08 || l > 0.96) continue;
-        const v = sat * (1 - Math.abs(l - 0.5) * 1.5);
-        if (sat < 0.2 || v < 0.08) { grey++; continue; }
-        vivid++;
-        const bn = bins[Math.floor(h / 15) % 24]; bn.w += v; bn.r += rgb[0] * v; bn.g += rgb[1] * v; bn.b += rgb[2] * v;
-      }
-      const order = bins.filter((b) => b.w > 0).sort((a, b) => b.w - a.w), total = order.reduce((n, b) => n + b.w, 0), picks = [];
-      for (const b of order) {
-        if (picks.length === 3 || (picks.length && b.w < total * 0.03)) break;
-        if (picks.every((q) => { const dd = Math.abs(q.i - b.i); return Math.min(dd, 24 - dd) >= 3; })) picks.push(b);
-      }
-      let acc = vivid > grey * 0.06 ? picks.map((b) => Y2K.specFor([b.r / b.w, b.g / b.w, b.b / b.w])) : [];
-      if (!acc.length) acc = [{ h: 210, s: 0.08, l: 0.45 }]; // black & white / grey cover: silver
-      while (acc.length < 3) { const a0 = acc[0]; acc.push({ h: (a0.h + (acc.length === 1 ? 40 : 320)) % 360, s: a0.s, l: a0.l }); }
-      Y2K.setAlbumPalette(key, acc);
-    } catch (e) {}
-  };
-  im.src = src;
+    try { const acc = coverAccents(im); rememberCover(src, mk, acc); afterTitle(() => { if (my === coverSeq) Y2K.setAlbumPalette(key, acc); }); } catch (e) {}
+  }, () => { if (my === coverSeq) coverLastSrc = ''; });
 }
 
 // the year display: the digits plus an all-segments-on copy behind them (the unlit segments of a real display)
@@ -1296,10 +1329,10 @@ function playLen() {
 // PG: the playing position for the progress strip, re-read every 250 ms and run on smoothly in between
 const PG = { pos: 0, len: 0, t: 0, run: false, drag: -1 };
 function updateTime() {
-  const playing = safe(() => H.isPlaying, false);
+  const P = Y2K.pb(), playing = P.playing;
   const len = (playing ? playLen() : 0) || +(cur && cur.lengthsec) || 0;
-  const pos = playing ? safe(() => H.position, 0) : 0;
-  PG.pos = pos; PG.len = len; PG.t = performance.now(); PG.run = playing && !safe(() => H.isPaused, false);
+  const pos = playing ? Math.min(P.pos, len || P.pos) : 0;
+  PG.pos = pos; PG.len = len; PG.t = performance.now(); PG.run = playing && !P.paused;
   $('tcur').innerHTML = Y2K.fmtTime(pos).replace(':', '<span class="colon">:</span>');
   $('tlen').textContent = len ? '-' + Y2K.fmtTime(len - pos) : '--:--';
   if (!dragging) setRail($('seek'), len ? pos / len : 0);
@@ -1594,7 +1627,7 @@ const smooth01 = (x) => x * x * (3 - 2 * x);
 const PBS = { t: -1e9, playing: false, paused: false };
 function pbState() {
   const now = performance.now();
-  if (now - PBS.t > 120) { PBS.playing = safe(() => H.isPlaying, false); PBS.paused = PBS.playing && safe(() => H.isPaused, false); PBS.t = now; }
+  if (now - PBS.t > 120) { const P = Y2K.pb(); PBS.playing = P.playing; PBS.paused = P.playing && P.paused; PBS.t = now; }
   return PBS;
 }
 ['playback:starting', 'playback:newTrack', 'playback:stopped', 'playback:paused'].forEach((ev) => fb2k.on(ev, () => { PBS.t = -1e9; }));
@@ -3447,15 +3480,17 @@ function readBeat() {
 }
 window.addEventListener('storage', (e) => { if (e.key === 'y2k:beat') readBeat(); });
 function beatPoll() {
-  const playing = safe(() => H.isPlaying, false), paused = safe(() => H.isPaused, false);
-  const key = playing ? safe(() => H.nowPlaying(BEAT_FMT), '') : '';
+  const P = Y2K.pb(), playing = P.playing, paused = P.paused;
+  // the track's identity only changes with a track change (or a stop): ask for it then, not 4 times a second
+  if (playing !== BT.wasPlaying || BT.keyStale) { BT.keyStale = false; BT.wasPlaying = playing; BT.keyNow = playing ? safe(() => H.nowPlaying(BEAT_FMT), '') : ''; }
+  const key = BT.keyNow || '';
   if (key !== BT.key) {
     BT.key = key; BT.scan = null; BT.running = false; liveReset();
     BT.tag = key ? parseFloat(safe(() => H.nowPlaying('%bpm%'), '')) || 0 : 0;
   }
   if (key && !BT.scan) readBeat();
   if (playing && !paused) {
-    const p = safe(() => H.position, 0), now = performance.now(), pred = BT.pos + (now - BT.posT) / 1000;
+    const p = P.pos, now = performance.now(), pred = BT.pos + (now - BT.posT) / 1000;
     if (!BT.running || Math.abs(p - pred) > 0.12) { BT.pos = p; BT.posT = now; } else BT.pos += (p - pred) * 0.15;
     BT.running = true;
   } else BT.running = false;
@@ -3468,6 +3503,7 @@ function beatPoll() {
       : BT.src === 'tag' ? 'Tempo from the track\'s BPM tag, beats located by the scanner' : BT.scan ? 'Tempo scanned from the whole track (' + BT.scan.bpm.toFixed(2) + ' BPM)' : 'Tempo of the playing track';
   }
 }
+['playback:trackChanged', 'playback:starting', 'playback:stopped', 'playback:dynamicInfo'].forEach((ev) => fb2k.on(ev, () => { BT.keyStale = true; }));
 setInterval(beatPoll, 250);
 fb2k.on('playback:seeked', () => { BT.running = false; beatPoll(); });
 
@@ -4280,7 +4316,8 @@ function placeCust() {
 window.addEventListener('resize', placeCust);
 function updateCustDemo() { $('cust').classList.toggle('demo', custOpen && !(safe(() => H.isPlaying, false) && !safe(() => H.isPaused, false))); }
 buildCust(); applyCfg();
-Y2K.fadePriority(); // theme fades run at full frame rate in the deck
+Y2K.fadePriority(); // the deck's canvases fade the theme colours themselves, every frame
+Y2K.liveArea('#title.marquee'); // a scrolling title stays live (not frozen) while the colours cross-fade
 Y2K.scopeAccent(document.querySelector('.pod'), 2); // MULTI album colours: the pod gets the third colour
 /* The lyrics panel (OpenLyrics) is a built-in foobar2000 panel, so its colours live in Columns UI's settings:
    tools/native-colours.ps1 imports a colours-only preset (the seek bar is a web panel now and follows the theme itself). */
@@ -4651,6 +4688,12 @@ fb2k.on('playback:seeked', updateTime);
 setInterval(updateTime, 250);
 window.addEventListener('resize', Y2K.debounce(() => cur && setTitle(cur.title || cur.filename || 'INSERT MUSIC'), 150));
 showVol(); showOrder(); showSAC(); render();
+// startup splash: keep it up until the first cover is on screen (or 2.5 s, whichever comes first)
+// taskbar: give foobar2000's window the Metalheart identity (one button with a pinned Metalheart shortcut), however
+// foobar2000 was started (splash\Metalheart.exe --tag; see the launcher's notes)
+if (Y2K.listDir(Y2K.profileDir + '/webview/y2k/splash').some((f) => /^metalheart\.exe$/i.test(f.name)))   // (a copy without the launcher)
+  safe(() => H.execute((Y2K.profileDir + '/webview/y2k/splash/Metalheart.exe').split('/').join(Y2K.BS), '--tag', '', 'open', 0));
+{ const done = Y2K.bootHold(), art = $('art'); setTimeout(done, 2500); if (art.getAttribute('src')) art.decode().then(done, done); else done(); }
 
 </script>
 </body>

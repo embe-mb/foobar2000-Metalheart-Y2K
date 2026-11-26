@@ -61,6 +61,12 @@ function Test-X64Exe([string]$path) {
   } catch { return $false }
 }
 
+# (plain .NET: Get-FileHash can be missing when PowerShell starts with another edition's module path)
+function Get-Sha([string]$path) {
+  if (-not (Test-Path $path)) { return '' }
+  $h = [Security.Cryptography.SHA256]::Create(); try { return [BitConverter]::ToString($h.ComputeHash([IO.File]::ReadAllBytes($path))) } finally { $h.Dispose() }
+}
+
 function Get-ProfileDir([string]$dir) {
   if (Test-Path (Join-Path $dir 'portable_mode_enabled')) { return (Join-Path $dir 'profile') }
   return (Join-Path $env:APPDATA 'foobar2000-v2')
@@ -172,6 +178,12 @@ $bClose.Text = 'Close'; $bClose.Location = New-Object Drawing.Point 340, 512; $b
 $bClose.FlatStyle = 'Flat'; $bClose.BackColor = $panel
 $bClose.Add_Click({ $form.Close() })
 $form.Controls.Add($bClose)
+# the launcher (splash\Metalheart.exe) is always built; this adds the shortcuts that start foobar2000 through it
+$cbLaunch = New-Object Windows.Forms.CheckBox
+$cbLaunch.Text = 'Metalheart shortcuts (Desktop + Start menu) with the splash screen'
+$cbLaunch.Location = New-Object Drawing.Point 22, 506; $cbLaunch.Size = New-Object Drawing.Size 310, 46
+$cbLaunch.ForeColor = $fg; $cbLaunch.Checked = $true
+$form.Controls.Add($cbLaunch)
 
 function Write-Log([string]$s) { $log.AppendText($s + "`r`n"); [Windows.Forms.Application]::DoEvents() }
 
@@ -205,7 +217,7 @@ $bInstall.Add_Click({
   $prof = Get-ProfileDir $d
   if (-not (Test-Path $ThemeSrc)) { Write-Log "ERROR: theme files not found next to the installer ($ThemeSrc). Unzip the whole download first."; return }
 
-  $bInstall.Enabled = $false; $bBrowse.Enabled = $false; $clb.Enabled = $false
+  $bInstall.Enabled = $false; $bBrowse.Enabled = $false; $clb.Enabled = $false; $cbLaunch.Enabled = $false
   $ok = $true
   try {
     Write-Log "foobar2000:  $d"
@@ -234,6 +246,13 @@ $bInstall.Add_Click({
     }
     if (-not $ok) { throw 'A required component could not be downloaded. Check your internet connection and press INSTALL again.' }
 
+    # An update keeps the user's own layout (panel sizes and the like) when it can: the Metalheart layout is already
+    # the one in use and this version's layout file is the same as the installed one. Otherwise it is imported.
+    $fclOld = Join-Path $prof 'webview\y2k\layouts\Metalheart-Y2K.fcl'
+    $hashOld = Get-Sha $fclOld
+    $inUse = $false
+    if (Test-Path $cuiCfg) { $t = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($cuiCfg)); $inUse = $t.Contains('deck.html') -and $t.Contains('y2k') }
+
     # the package's profile folder = the theme panels (webview\y2k) + the MilkDrop preset pack (milkdrop2)
     Write-Log 'Copying the theme files...'
     foreach ($sub in 'webview\y2k', 'milkdrop2') {
@@ -250,16 +269,41 @@ $bInstall.Add_Click({
     # %APPDATA%, away from the program, so tell them where foobar2000.exe is (UTF-8 without BOM)
     [IO.File]::WriteAllText((Join-Path $dest 'fb2k-exe.txt'), (Resolve-Path $exe).Path)
 
+    # the launcher: built here from its source (the theme ships no programs), with the Windows C# compiler
+    Write-Log 'Building the Metalheart launcher (splash screen)...'
+    $build = Join-Path $dest 'splash\src\build.ps1'
+    $launcher = Join-Path $dest 'splash\Metalheart.exe'
+    $built = $false
+    if (Test-Path $build) {
+      $bargs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $build) + $(if ($cbLaunch.Checked) { '-Shortcuts' })
+      $out = & powershell.exe @bargs 2>&1
+      $built = $LASTEXITCODE -eq 0
+      foreach ($line in $out) { Write-Log "  $line" }
+      if (-not $built) { Write-Log '  (the theme works without it; foobar2000 just starts without the splash screen)' }
+    }
+
+    $hashNew = Get-Sha $fclOld
+    if ($inUse -and $hashOld -and $hashOld -eq $hashNew) {
+      Write-Log 'Kept your layout: the Metalheart layout is already in use and has not changed in this version.'
+      Write-Log 'Starting foobar2000...'
+      if ($built -and (Test-Path $launcher)) { Start-Process -FilePath $launcher -WorkingDirectory $d } else { Start-Process -FilePath $exe -WorkingDirectory $d }
+      Write-Log ''
+      Write-Log 'DONE. Enjoy METALHEART // Y2K.'
+      if ($built -and $cbLaunch.Checked) { Write-Log 'Start foobar2000 with the new Metalheart shortcut (Desktop / Start menu) to get the splash screen.' }
+      $bInstall.Text = 'INSTALLED'
+      return
+    }
+
     # The layout can only be imported once Columns UI is the running interface, so start foobar2000 and wait for it
     Write-Log 'Starting foobar2000...'
     Start-Process -FilePath $exe -WorkingDirectory $d
-    $script:apply = @{ Exe = (Resolve-Path $exe).Path; Dir = $d; Fcl = (Join-Path $dest 'layouts\Metalheart-Y2K.fcl'); FreshCui = -not (Test-Path $cuiCfg); Start = Get-Date; Seen = $null; AskedUi = $false; ToldPrefs = $false }
+    $script:apply = @{ Exe = (Resolve-Path $exe).Path; Dir = $d; Fcl = (Join-Path $dest 'layouts\Metalheart-Y2K.fcl'); FreshCui = -not (Test-Path $cuiCfg); Shortcuts = $built -and $cbLaunch.Checked; Start = Get-Date; Seen = $null; AskedUi = $false; ToldPrefs = $false }
     $bInstall.Text = 'WAITING...'
     $timer.Start()
   } catch {
     Write-Log ''
     Write-Log "ERROR: $($_.Exception.Message)"
-    $bInstall.Enabled = $true; $bBrowse.Enabled = $true; $clb.Enabled = $true
+    $bInstall.Enabled = $true; $bBrowse.Enabled = $true; $clb.Enabled = $true; $cbLaunch.Enabled = $true
   }
 })
 
@@ -308,6 +352,7 @@ $timer.Add_Tick({
   Write-Log ''
   Write-Log 'DONE. Enjoy METALHEART // Y2K.'
   Write-Log 'Add your music with  + MUSIC  in the control pod, and try CUSTOMIZE DECK (the green button).'
+  if ($a.Shortcuts) { Write-Log 'From now on, start foobar2000 with the Metalheart shortcut (Desktop / Start menu) for the splash screen.' }
   $bInstall.Text = 'INSTALLED'
 })
 

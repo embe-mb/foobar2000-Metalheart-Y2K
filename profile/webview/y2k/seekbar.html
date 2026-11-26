@@ -23,7 +23,7 @@
 </head>
 <body>
 <div class="bar" id="bar"><canvas id="cv"></canvas><span class="status" id="status"></span><div class="tip" id="tip"></div></div>
-<script src="common.js?v=31"></script>
+<script src="common.js?v=47"></script>
 <script src="alac.js?v=1"></script>
 <script>
 'use strict';
@@ -342,8 +342,9 @@ let samples = null, vis = { n: 0, ch: 2 }, live = null;
 function startLive(msg) { wave = newWave(2); live = { filled: new Uint8Array(N), key }; setStatus(msg); dirty = true; }
 function liveFeed() {
   if (!live || !wave || !samples || !(vis.n > 0) || live.key !== key) return;
-  if (!safe(() => H.isPlaying, false) || safe(() => H.isPaused, false)) return;
-  const len = trackLen(), pos = safe(() => H.position, 0);
+  const P = Y2K.pb();
+  if (!P.playing || P.paused) return;
+  const len = trackLen(), pos = Math.min(P.pos, len);
   if (!(len > 0)) return;
   const b = Math.min(N - 1, Math.floor((pos / len) * N)), ch = vis.ch, n = Math.min(vis.n, samples.length);
   for (let c = 0; c < 2; c++) {
@@ -366,7 +367,13 @@ fb2k.on('visualisation:timer', (a) => { vis.n = a.sampleCount; vis.ch = a.channe
 safe(() => H.requestSharedBuffer());
 
 /* H.length can read 0, so the length comes from the now-playing info (%length_seconds_fp%) when it does */
-const trackLen = () => safe(() => H.length, 0) || (key ? +key.split('|')[3] || 0 : 0);
+// the track's length, asked again at most once a second (draw() runs every frame: see Y2K.pb)
+let lenMemo = { key: null, v: 0, t: -1e9 };
+const trackLen = () => {
+  const now = performance.now();
+  if (lenMemo.key !== key || now - lenMemo.t > 1000) lenMemo = { key, v: safe(() => H.length, 0) || (key ? +key.split('|')[3] || 0 : 0), t: now };
+  return lenMemo.v;
+};
 
 /* ---------------- seeking ---------------- */
 const bar = $('bar'), cv = $('cv'), cx = cv.getContext('2d');
@@ -448,7 +455,7 @@ function draw(now) {
   requestAnimationFrame(draw);
   loadCfg();
   if (TH.look !== Y2K.look.caps) themeCols();
-  const playing = safe(() => H.isPlaying, false), paused = safe(() => H.isPaused, false);
+  const P = Y2K.pb(), playing = P.playing, paused = P.paused;   // (no host call every frame)
   const busy = (playing && !paused) || hoverX >= 0 || dragFrac >= 0 || scanning || dirty || level > 0.004; // keeps drawing while the glow fades out
   if (!busy && now - lastDraw < 500) return;
   const FR = lastFrame ? Math.min(8, (now - lastFrame) / (1000 / 75)) : 1; // 75 Hz frames since the last draw (refresh-rate independent decay)
@@ -457,7 +464,7 @@ function draw(now) {
   if (!w || !h) return;
   if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
   cx.setTransform(dpr, 0, 0, dpr, 0, 0); cx.clearRect(0, 0, w, h);
-  const len = playing ? trackLen() : 0, pos = playing ? safe(() => H.position, 0) : 0;
+  const len = playing ? trackLen() : 0, pos = playing ? Math.min(P.pos, len || P.pos) : 0;
   const frac = dragFrac >= 0 ? dragFrac : len > 0 ? pos / len : 0;
   const C = TH.c, HI = TH.hi, U = SC.seekUnplayed === 'theme' ? C : TH.blue, UH = SC.seekUnplayed === 'theme' ? TH.l1 : TH.blueHi;
   const mid = h / 2, half = h / 2 - 5;
@@ -516,10 +523,16 @@ function draw(now) {
 }
 
 /* ---------------- wiring ---------------- */
-function poll() {
-  const playing = safe(() => H.isPlaying, false);
-  const info = playing ? safe(() => H.nowPlaying('%path%|$if2(%subsong%,0)|$if2(%filesize%,0)|%length_seconds_fp%'), '') : '';
-  if (info !== key) { key = info; if (!info) publishBeat('', null); loadWave(info); }
+// (through the asynchronous host object, so a busy foobar2000 never holds up the drawing)
+let polling = false;
+async function poll() {
+  if (polling) return;
+  polling = true;
+  try {
+    const HA = chrome.webview.hostObjects.foo_uie_webview, playing = !!(await HA.isPlaying);
+    const info = playing ? String(await HA.nowPlaying('%path%|$if2(%subsong%,0)|$if2(%filesize%,0)|%length_seconds_fp%') || '') : '';
+    if (info !== key) { key = info; if (!info) publishBeat('', null); loadWave(info); }
+  } catch (e) {} finally { polling = false; }
 }
 themeCols(); Y2K.onSchemeChange(themeCols);
 loadCfg();

@@ -6,6 +6,13 @@
 
 const Y2K = (() => {
   const H = chrome.webview.hostObjects.sync.foo_uie_webview;
+  /* The same host object, asynchronous: its calls return Promises and never hold up this panel. Every synchronous
+     H call waits for foobar2000's UI thread, which all the panels share; while foobar2000 is busy (adding files,
+     another panel reading folders) a synchronous call in a drawing loop freezes that panel's frames. So anything
+     that runs every frame or on a timer uses HA, or the playback copy below (pb). */
+  const HA = chrome.webview.hostObjects.foo_uie_webview;
+  // HA's results are only ever awaited: on its proxies .catch / .then are names of host methods, not the Promise's
+  const ha = async (fn, dflt) => { try { const v = await fn(); return v === undefined ? dflt : v; } catch (e) { return dflt; } };
   const BS = String.fromCharCode(92);           // backslash, kept out of literals on purpose
   const SEP = String.fromCharCode(30);          // record separator used in title-formatting output
   // no Edge "saved info" / typed-text suggestions under the theme's text boxes (they list things typed anywhere)
@@ -286,7 +293,7 @@ const Y2K = (() => {
   function resolveArt(t, late) {
     if (!t || t._src === 'none') return { src: '', origin: 'none' };
     const ck = t.dir + '|' + (t._src !== 'none' ? t._key : '');
-    if (artCache.has(ck)) return artCache.get(ck);
+    if (!t._local && artCache.has(ck)) return artCache.get(ck);
     if (!t._local && ndArtUrl(t.path)) {
       const url = ndArtUrl(t.path, 600);
       if (ndArtDone.has(url)) {
@@ -297,48 +304,122 @@ const Y2K = (() => {
       ndArt(t.path).then((v) => { if (v && late) late(resolveArt(t)); });
       return { src: '', origin: 'none' };
     }
-    let res = null;
-    const files = t._local ? listDir(t._dirFwd) : [];
+    const cand = artCandidates(t);
+    if (!cand.length) return { src: '', origin: 'none' };
+    const id = cand.map((c) => c.id).join('>');
+    if (artMem.has(id)) return artMem.get(id);
+    // not made yet: it comes through late(); meanwhile the caller keeps what it shows ('pending')
+    artFor(id, cand).then((r) => { if (late) late(r); });
+    return { src: '', origin: cand[0].origin, pending: true };
+  }
+
+  /* Cover art for showing, without ever holding anything up. A cover file can be several MB; read whole through the
+     synchronous host object it held this panel AND foobar2000's UI thread (so every panel) while ~4 MB of text
+     crossed over, and was then decoded at full size, at the very moment a new album starts. Now each cover is made
+     once into a display-size copy (ART_MAX px): read through HA, decoded and scaled off the main thread, encoded off
+     it too, and kept in the shared IndexedDB, so every panel (and the next session) takes the copy. The Media Library
+     makes it ahead of time when an album is opened or played (prepareArt). */
+  const ART_MAX = 1000;
+  const artMem = new Map(), artBusy = new Map();
+  // where a track's cover comes from, in the order tried: folder.* > cover.* > front.* > embedded > scans/artwork
+  // subfolder > any other image in the folder. Cheap: one (cached) folder listing; nothing is read yet.
+  function artCandidates(t) {
+    const out = [], files = t._local ? listDir(t._dirFwd) : [];
     const imgs = files.filter((f) => !f.isDirectory && IMG.test(f.name));
-    const pick = (stem, list, base) => {
-      const f = list.find((x) => x.name.replace(IMG, '').toLowerCase() === stem);
-      return f ? { src: readImage(base + '/' + f.name), origin: f.name } : null;
-    };
-    for (const stem of ['folder', 'cover', 'front']) {
-      res = pick(stem, imgs, t._dirFwd);
-      if (res && res.src) break;
-      res = null;
-    }
-    if (!res && t._src === 'playing') {
-      const emb = safe(() => H.getArtwork('front'));
-      if (emb) res = { src: emb, origin: 'embedded' };
-    }
-    if (!res && t._src === 'focused' && t._idx >= 0) {
-      const emb = safe(() => H.getPlaylistArtwork('front', t._pl, t._idx));
-      if (emb) res = { src: emb, origin: 'embedded' };
-    }
-    if (!res && t._local) {
-      // scans/artwork subfolders
+    const file = (base, f, origin) => out.push({ id: 'f|' + (base + '/' + f.name).toLowerCase() + '|' + (f.size || 0), origin: origin || f.name, read: () => artBytes(base + '/' + f.name, f.size) });
+    for (const stem of ['folder', 'cover', 'front']) { const f = imgs.find((x) => x.name.replace(IMG, '').toLowerCase() === stem); if (f) { file(t._dirFwd, f); break; } }
+    const own = t.path ? files.find((x) => x.name.toLowerCase() === String(t.path).split(/[\\/]/).pop().toLowerCase()) : null;
+    const eid = 'e|' + String(t.path || '').toLowerCase() + '|' + (t.subsong || '') + '|' + (own ? own.size : '');
+    if (t._src === 'playing') out.push({ id: eid, origin: 'embedded', read: async () => uriBlob(await ha(() => HA.getArtwork('front'), '')) });
+    else if (t._src === 'focused' && t._idx >= 0) out.push({ id: eid, origin: 'embedded', read: async () => uriBlob(await ha(() => HA.getPlaylistArtwork('front', t._pl, t._idx), '')) });
+    if (t._local) {
       const sub = files.find((f) => f.isDirectory && /^[-_ ]*(scans?|artwork|covers?|images?|art)$/i.test(f.name));
       if (sub) {
-        const base = t._dirFwd + '/' + sub.name;
-        const simgs = listDir(base).filter((f) => !f.isDirectory && IMG.test(f.name));
-        for (const stem of ['folder', 'cover', 'front']) { res = pick(stem, simgs, base); if (res && res.src) break; res = null; }
-        if (!res && simgs.length) {
-          const f = simgs.find((x) => /front|cover|folder/i.test(x.name)) || null;
-          if (f) res = { src: readImage(base + '/' + f.name), origin: sub.name + '/' + f.name };
+        const base = t._dirFwd + '/' + sub.name, simgs = listDir(base).filter((f) => !f.isDirectory && IMG.test(f.name));
+        const f = ['folder', 'cover', 'front'].map((stem) => simgs.find((x) => x.name.replace(IMG, '').toLowerCase() === stem)).find(Boolean) || simgs.find((x) => /front|cover|folder/i.test(x.name));
+        if (f) file(base, f, sub.name + '/' + f.name);
+      }
+      if (imgs.length) { const f = imgs.find((x) => /front|cover|folder|album/i.test(x.name)) || imgs.slice().sort((x, y) => y.size - x.size)[0]; file(t._dirFwd, f); }
+    }
+    return out.filter((c, i) => out.findIndex((x) => x.id === c.id) === i);
+  }
+  function artFor(id, cand) {
+    if (artMem.has(id)) return Promise.resolve(artMem.get(id));
+    if (artBusy.has(id)) return artBusy.get(id);
+    const p = (async () => {
+      const key = 'art' + ART_MAX + '|' + id, hit = await idb.get(key);
+      let r = hit && hit.v ? { src: hit.v, origin: hit.origin } : null;
+      if (!r) {
+        for (const c of cand) {
+          const blob = await c.read();
+          if (!blob) continue;
+          const src = await shrinkArt(blob);
+          if (!src) continue;
+          r = { src, origin: c.origin };
+          idb.set(key, { t: Date.now(), v: r.src, origin: r.origin });
+          break;
         }
       }
-      if (!res && imgs.length) {
-        const f = imgs.find((x) => /front|cover|folder|album/i.test(x.name)) || imgs.slice().sort((a, b) => b.size - a.size)[0];
-        res = { src: readImage(t._dirFwd + '/' + f.name), origin: f.name };
+      r = r || { src: '', origin: 'none' };
+      if (artMem.size > 24) artMem.delete(artMem.keys().next().value);
+      artMem.set(id, r);
+      return r;
+    })().finally(() => artBusy.delete(id));
+    artBusy.set(id, p);
+    return p;
+  }
+  const blobUri = (b) => new Promise((res) => { const fr = new FileReader(); fr.onload = () => res(String(fr.result || '')); fr.onerror = () => res(''); fr.readAsDataURL(b); });
+  const uriBlob = async (uri) => { if (!uri) return null; try { return await (await fetch(uri)).blob(); } catch (e) { return null; } };
+  /* A cover file's bytes, read by the browser itself. Even HA.readImage runs inside foobar2000 on its one UI thread:
+     reading and base64-encoding a 10 MB scan there froze every panel for ~0.4 s (about 38 ms per MB). The page is served from this folder
+     (http://foo_uie_webview.local/), which the browser reads straight from disk, so Windows' robocopy copies the file
+     into artcache\<id>\ (in its own process), the page fetches it, and the copy is deleted again a little later.
+     Only if that can't run is the file read through HA. */
+  const artCopyMade = new Map();
+  async function artBytes(pathFwd, size) {
+    if (size > 0 && size < 600000) return uriBlob(await ha(() => HA.readImage(pathFwd), ''));   // cheaper than two launches
+    const id = pathId(pathFwd), name = pathFwd.slice(pathFwd.lastIndexOf('/') + 1);
+    const url = 'artcache/' + id + '/' + encodeURIComponent(name);
+    const grab = async () => { try { const r = await fetch(url, { cache: 'no-store' }); return r.ok ? await r.blob() : null; } catch (e) { return null; } };
+    let blob = await grab();
+    if (!blob && safe(() => H.canExecuteShellOperations, true)) {
+      const dst = (profileDir.replace(/\/$/, '') + '/webview/y2k/artcache/' + id).split('/').join(BS);
+      // every panel runs its own copy of this file: only one of them launches the copy (and later removes it)
+      const lock = 'artcopy:' + id, busy = +(safe(() => localStorage.getItem(lock)) || 0);
+      if (Date.now() - busy > 15000) {
+        safe(() => localStorage.setItem(lock, String(Date.now())));
+        const srcDir = pathFwd.slice(0, pathFwd.lastIndexOf('/')).split('/').join(BS);
+        safe(() => H.execute('robocopy.exe', '"' + srcDir + '" "' + dst + '" "' + name + '" /R:0 /W:0 /NJH /NJS /NFL /NDL /NP', '', 'open', 0));
+        clearTimeout(artCopyMade.get(id));
+        artCopyMade.set(id, setTimeout(() => { artCopyMade.delete(id); safe(() => H.execute('cmd.exe', '/c rmdir /s /q "' + dst + '"', '', 'open', 0)); }, 20000));
       }
+      for (let i = 0; i < 50 && !blob; i++) { await new Promise((r) => setTimeout(r, 100)); blob = await grab(); }
     }
-    if (!res && t._src !== 'playing') res = { src: '', origin: 'none' };
-    res = res && res.src ? res : { src: '', origin: 'none' };
-    if (artCache.size > 40) artCache.clear();
-    artCache.set(ck, res);
-    return res;
+    return blob || uriBlob(await ha(() => HA.readImage(pathFwd), ''));
+  }
+  // a cover as a data: URL scaled to fit ART_MAX, all of it off the main thread (decode, scale, encode); see-through
+  // covers stay PNG. '' if it isn't a picture the browser can read.
+  async function shrinkArt(blob) {
+    try {
+      const full = await createImageBitmap(blob), W = full.width, Hh = full.height; full.close();
+      const k = Math.min(1, ART_MAX / Math.max(W, Hh));
+      if (k === 1 && blob.size < 600000) return await blobUri(blob);   // small enough already
+      const w = Math.max(1, Math.round(W * k)), h = Math.max(1, Math.round(Hh * k));
+      const bmp = await createImageBitmap(blob, { resizeWidth: w, resizeHeight: h, resizeQuality: 'high' });
+      const oc = new OffscreenCanvas(w, h), g = oc.getContext('2d', { willReadFrequently: true });
+      g.drawImage(bmp, 0, 0); bmp.close();
+      const corner = (x, y) => g.getImageData(x, y, 1, 1).data[3];
+      const alpha = [corner(0, 0), corner(w - 1, 0), corner(0, h - 1), corner(w - 1, h - 1)].some((v) => v < 250);
+      return await blobUri(await oc.convertToBlob(alpha ? { type: 'image/png' } : { type: 'image/jpeg', quality: 0.92 }));
+    } catch (e) { return ''; }
+  }
+  /** Make an album's cover copy ahead of time (the Media Library: an album opened or played). dirFwd: its folder. */
+  function prepareArt(dirFwd) {
+    if (!dirFwd) return;
+    setTimeout(() => {
+      const cand = artCandidates({ _local: true, _dirFwd: dirFwd, _src: 'file' }).filter((c) => c.origin !== 'embedded');
+      if (cand.length) artFor(cand.map((c) => c.id).join('>'), cand);
+    }, 0);
   }
 
   /* --------------------------------------------------------------- format art
@@ -415,8 +496,8 @@ const Y2K = (() => {
   function smallImage(pathFwd, max = 320, size = 0) {
     const ck = pathFwd + '|' + max + '|' + size;
     if (smallImgMem.has(ck)) return smallImgMem.get(ck);
-    const p = new Promise((res) => {
-      const src = readImage(pathFwd);
+    const p = new Promise(async (res) => {
+      const b = await artBytes(pathFwd), src = b ? await blobUri(b) : '';   // (never through foobar's thread: see artBytes)
       if (!src) return res(null);
       const im = new Image();
       im.onload = () => {
@@ -958,7 +1039,7 @@ const Y2K = (() => {
   /* --------------------------------------------------------------- theme updates
      VERSION is this copy of the theme: bump it for every GitHub release and tag the release v<VERSION>.
      checkUpdate asks GitHub for the latest release (cached an hour unless forced). */
-  const VERSION = '1.6';
+  const VERSION = '1.7';
   const REPO = 'embe-mb/foobar2000-Metalheart-Y2K';
   const verNum = (s) => String(s || '').replace(/^v/i, '').split('.').map((n) => parseInt(n, 10) || 0);
   function isNewer(a, b) {
@@ -1046,6 +1127,39 @@ const Y2K = (() => {
     return false;
   }
   const runCommand = (name) => runFb2k('/command:"' + name + '"');
+
+  /* --------------------------------------------------------------- startup splash
+     splash\Metalheart.exe starts foobar2000 and covers its window with the animated logo while the panels
+     load. It writes splash\active.txt (its start time) as it starts; while that file is fresh, every panel reports in:
+     'y2k:boot:<session>:<page>:<id>' = 0 when its script starts, 1 once it has drawn its first frame. When every panel
+     that started has drawn and none has started or finished for 700 ms, one of them runs Metalheart.exe --ready
+     and the splash fades away. A page can hold that back a moment with Y2K.bootHold() (the deck does, until its cover
+     shows). Started without the splash (no fresh active.txt), all of this is skipped. */
+  const SPLASH_DIR = profileDir + '/webview/y2k/splash';
+  const bootHold = (() => {
+    const sess = (readText(SPLASH_DIR + '/active.txt') || '').trim(), age = Date.now() - (+sess || 0);
+    if (!profileDir || !sess || !(age >= -5000 && age < 90000)) return () => () => {};
+    const pre = 'y2k:boot:' + sess + ':', me = pre + (location.pathname.split('/').pop() || 'page') + ':' + Math.random().toString(36).slice(2, 8);
+    const keys = () => { const ks = []; safe(() => { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith('y2k:boot:')) ks.push(k); } }); return ks; };
+    keys().filter((k) => !k.startsWith(pre)).forEach((k) => safe(() => localStorage.removeItem(k))); // earlier startups
+    safe(() => localStorage.setItem(me, '0'));
+    let holds = 1, last = Date.now(), sent = false; // the first hold is the page's own first frame
+    window.addEventListener('storage', (e) => { if (e.key && e.key.startsWith(pre)) last = Date.now(); });
+    const release = () => { if (--holds === 0) { safe(() => localStorage.setItem(me, '1')); last = Date.now(); } };
+    const drawn = () => { if (document.hidden) release(); else requestAnimationFrame(() => requestAnimationFrame(release)); };
+    const settled = () => (document.fonts ? document.fonts.ready.then(drawn, drawn) : drawn());
+    if (document.readyState === 'complete') settled(); else window.addEventListener('load', settled, { once: true });
+    const timer = setInterval(() => {
+      if (sent || safe(() => localStorage.getItem(pre + 'sent'), null)) { sent = true; clearInterval(timer); return; }
+      const ks = keys().filter((k) => k.startsWith(pre) && k !== pre + 'sent');
+      if (!ks.every((k) => safe(() => localStorage.getItem(k), '1') === '1') || Date.now() - last < 700) return;
+      sent = true; clearInterval(timer);
+      safe(() => localStorage.setItem(pre + 'sent', '1'));
+      safe(() => H.execute(SPLASH_DIR.split('/').join(BS) + BS + 'Metalheart.exe', '--ready', '', 'open', 0));
+    }, 120);
+    /** Holds the splash until the function it returns is called. */
+    return () => { holds++; let done = false; return () => { if (!done) { done = true; release(); } }; };
+  })();
 
   /* --------------------------------------------------------------- Navidrome / Subsonic
      One server for every panel (Media Library, Artist Bio): its address, the user and a salted token (Subsonic token
@@ -1313,18 +1427,65 @@ const Y2K = (() => {
     const idx = pl >= 0 ? safe(() => H.getFocusedPlaylistItem(pl), -1) : -1;
     return 'F|' + pl + '|' + idx + '|' + (idx >= 0 ? safe(() => H.getPlaylistItemFormattedText(pl, idx, '[%path%]|[%subsong%]')) : '');
   }
+  /** trackKey() through the asynchronous host object (for timers: it never holds up the panel). */
+  async function trackKeyAsync() {
+    if (await HA.isPlaying) return 'P|' + (await HA.nowPlaying('[%path%]|[%subsong%]|[%title%]')) + '|' + (await HA.isPaused);
+    const pl = +(await HA.activePlaylist), idx = pl >= 0 ? +(await HA.getFocusedPlaylistItem(pl)) : -1;
+    return 'F|' + pl + '|' + idx + '|' + (idx >= 0 ? await HA.getPlaylistItemFormattedText(pl, idx, '[%path%]|[%subsong%]') : '');
+  }
 
   function onTrackContextChange(cb) {
     let last = trackKey();
     const fire = (why) => { last = trackKey(); cb(why); };
-    const d = debounce(fire, 120);
+    // focus / selection / switching playlists only matter when they change the track shown (filling Library
+    // Selection sends a stream of them); tag edits and stream titles always do
+    const MOVE = new Set(['playlist:focusChanged', 'playlist:selectionChanged', 'playlist:activated']);
+    let moves = true;
+    const d = debounce(() => { const onlyMoves = moves; moves = true; if (onlyMoves && trackKey() === last) return; fire('event'); }, 120);
     ['playback:trackChanged', 'playback:starting', 'playback:stopped', 'playback:edited', 'playback:dynamicInfo',
       'playlist:focusChanged', 'playlist:activated', 'playlist:itemsModified', 'playlist:selectionChanged']
-      .forEach((e) => fb2k.on(e, () => d(e)));
-    // Watchdog: events can race the host's now-playing context, so also poll a cheap key.
-    setInterval(() => { if (document.hidden) return; const k = trackKey(); if (k !== last) fire('watchdog'); }, 600);
+      .forEach((e) => fb2k.on(e, () => { if (!MOVE.has(e)) moves = false; d(); }));
+    // Watchdog: events can race the host's now-playing context, so also poll a cheap key (asynchronously)
+    let asking = false;
+    setInterval(() => {
+      if (document.hidden || asking) return;
+      asking = true;
+      trackKeyAsync().then((k) => { if (k !== last) fire('watchdog'); }, () => {}).finally(() => { asking = false; });
+    }, 600);
     document.addEventListener('visibilitychange', () => { if (!document.hidden && trackKey() !== last) fire('visible'); });
   }
+
+  /* --------------------------------------------------------------- playback state, without asking every frame
+     A copy of is-playing / paused / position for drawing loops: kept by the playback events, re-read four times a
+     second through HA (so a busy foobar2000 never stalls a frame), and the position run on with the clock in
+     between. pb() = { playing, paused, pos } with pos in seconds, now. */
+  const PB = { playing: false, paused: false, pos: 0, at: 0, gen: 0, on: false };
+  function pbStart() {
+    PB.on = true;
+    PB.playing = !!safe(() => H.isPlaying, false); PB.paused = PB.playing && !!safe(() => H.isPaused, false);
+    PB.pos = PB.playing ? +safe(() => H.position, 0) || 0 : 0; PB.at = performance.now();
+    const set = (fn) => { PB.pos = pbPos(); PB.at = performance.now(); fn(); PB.gen++; };
+    fb2k.on('playback:starting', (p) => set(() => { PB.playing = true; PB.paused = !!(p && p.paused); PB.pos = 0; }));
+    fb2k.on('playback:trackChanged', () => set(() => { PB.playing = true; PB.pos = 0; }));
+    fb2k.on('playback:stopped', () => set(() => { PB.playing = PB.paused = false; PB.pos = 0; }));
+    fb2k.on('playback:paused', (p) => set(() => { PB.paused = !!(p && p.paused); }));
+    fb2k.on('playback:seeked', (p) => set(() => { PB.pos = +(p && p.time) || 0; }));
+    fb2k.on('playback:time', (p) => { if (PB.playing && !PB.paused && p) { PB.pos = +p.time || 0; PB.at = performance.now(); } });
+    let asking = false;
+    setInterval(() => {
+      if (document.hidden || asking) return;
+      asking = true;
+      const gen = PB.gen, t = performance.now();
+      Promise.all([ha(() => HA.isPlaying, false), ha(() => HA.isPaused, false), ha(() => HA.position, 0)]).then(([pl, pa, po]) => {
+        if (gen !== PB.gen) return;   // an event got here first: it is newer
+        const now = performance.now();
+        PB.playing = !!pl; PB.paused = PB.playing && !!pa;
+        PB.pos = PB.playing ? (+po || 0) + (PB.paused ? 0 : (now - t) / 2000) : 0; PB.at = now;   // read half way there
+      }, () => {}).finally(() => { asking = false; });
+    }, 250);
+  }
+  function pbPos() { return PB.playing ? PB.pos + (PB.paused ? 0 : (performance.now() - PB.at) / 1000) : 0; }
+  function pb() { if (!PB.on) pbStart(); return { playing: PB.playing, paused: PB.paused, pos: pbPos() }; }
 
   /* --------------------------------------------------------------- thumbnails (IndexedDB cache) */
   const idb = (() => {
@@ -1399,21 +1560,71 @@ const Y2K = (() => {
   })).catch(() => keys.map(() => undefined));
   async function makeThumb(job) {
     const file = job.nd ? '' : findDirArtFile(job.dirFwd);
-    let uri = job.nd ? await ndArt(job.nd, Math.max(job.size * 2, 200)) : file ? readImage(file) : '';
+    // (never through foobar2000's thread for a big file, see artBytes: a 96 px thumb of a 10 MB scan froze every panel)
+    let uri = '', objUrl = '';
+    if (job.nd) uri = await ndArt(job.nd, Math.max(job.size * 2, 200));
+    else if (file) {
+      const f = listDir(job.dirFwd).find((x) => job.dirFwd + '/' + x.name === file);
+      const b = await artBytes(file, f ? f.size : 0);
+      if (b) uri = objUrl = URL.createObjectURL(b);
+    }
+    try { return await thumbFrom(uri, job); } finally { if (objUrl) URL.revokeObjectURL(objUrl); }
+  }
+  async function thumbFrom(uri, job) {
     const src = job.nd ? '' : job.trackPath;
     if (!uri && src && typeof src === 'object') { // an item that's already in a playlist: read it directly
-      const same = safe(() => H.getPlaylistItemFormattedText(src.pl, src.idx, '%path%'), '') === src.path;
-      uri = same ? safe(() => H.getPlaylistArtwork('front', src.pl, src.idx), '') || '' : await embeddedArt(src.path);
+      const same = (await ha(() => HA.getPlaylistItemFormattedText(src.pl, src.idx, '%path%'), '')) === src.path;
+      uri = same ? (await ha(() => HA.getPlaylistArtwork('front', src.pl, src.idx), '')) || '' : await embeddedArt(src.path);
     } else if (!uri && src) uri = await embeddedArt(src);
     if (!uri) return '';
+    const s = job.size;
     try {
-      const img = new Image(); img.src = uri; await img.decode();
-      const s = job.size, cv = document.createElement('canvas'); cv.width = cv.height = s;
-      const k = Math.max(s / img.naturalWidth, s / img.naturalHeight), w = img.naturalWidth * k, h = img.naturalHeight * k;
-      const cx = cv.getContext('2d'); cx.imageSmoothingQuality = 'high'; cx.drawImage(img, (s - w) / 2, (s - h) / 2, w, h);
-      img.src = '';   // let go of the full-size image straight away
+      // decoded and scaled down off the main thread (a 3000 px scan took a frame or more to scale here)
+      const blob = await (await fetch(uri)).blob();
+      const full = await createImageBitmap(blob), W = full.width, Hh = full.height; full.close();
+      const side = Math.min(W, Hh);   // the centred square, as background-size: cover shows it
+      const bmp = await createImageBitmap(blob, Math.round((W - side) / 2), Math.round((Hh - side) / 2), side, side, { resizeWidth: s, resizeHeight: s, resizeQuality: 'high' });
+      const cv = document.createElement('canvas'); cv.width = cv.height = s;
+      cv.getContext('2d').drawImage(bmp, 0, 0); bmp.close();
       return cv.toDataURL('image/jpeg', 0.82);
-    } catch (e) { return ''; }
+    } catch (e) {
+      try {   // the old way (an image the bitmap decoder won't take)
+        const img = new Image(); img.src = uri; await img.decode();
+        const cv = document.createElement('canvas'); cv.width = cv.height = s;
+        const k = Math.max(s / img.naturalWidth, s / img.naturalHeight), w = img.naturalWidth * k, h = img.naturalHeight * k;
+        const cx = cv.getContext('2d'); cx.imageSmoothingQuality = 'high'; cx.drawImage(img, (s - w) / 2, (s - h) / 2, w, h);
+        img.src = '';
+        return cv.toDataURL('image/jpeg', 0.82);
+      } catch (e2) { return ''; }
+    }
+  }
+  /* Scrolling: a frame has ~7-13 ms, and anything that asks foobar2000 for files can take longer (it waits for
+     foobar2000's UI thread): thumbnail work that needs foobar2000 waits for a pause in the scrolling. */
+  let lastScroll = 0;
+  ['scroll', 'wheel'].forEach((e) => addEventListener(e, () => { lastScroll = performance.now(); }, { capture: true, passive: true }));
+  const calm = (ms) => new Promise((res) => { (function chk() { const q = performance.now() - lastScroll; if (q >= ms) res(); else setTimeout(chk, ms - q + 15); })(); });
+  // cached thumbnails are shown at once; whether the folder's cover changed since is checked afterwards, one at a
+  // time while nothing moves (a changed cover is made again and shows the next time the album is drawn)
+  const rechecks = new Map(); let recheckBusy = false;
+  function recheckThumb(j) {
+    if (j.nd || rechecks.has(j.key)) return;
+    rechecks.set(j.key, j);
+    if (recheckBusy) return;
+    recheckBusy = true;
+    (async () => {
+      try {
+        while (rechecks.size) {
+          await calm(1500);
+          await new Promise((r) => setTimeout(r, 120));   // a few a second: foobar2000 stays free for the others
+          await new Promise((r) => (window.requestIdleCallback ? requestIdleCallback(r, { timeout: 2000 }) : setTimeout(r, 50)));
+          const [key, job] = rechecks.entries().next().value; rechecks.delete(key);
+          const sig = thumbSig(job);
+          if (sig === job.cached.sig) continue;
+          const v = await makeThumb(job);
+          idb.set(key, { t: Date.now(), v, sig }); memPut(key, v);
+        }
+      } finally { recheckBusy = false; }
+    })();
   }
   async function pumpThumbs() {
     if (thumbBusy) return;
@@ -1441,14 +1652,16 @@ const Y2K = (() => {
           if (j.alive && !safe(j.alive, true)) { j.resolve(null); continue; }
           let v;
           if (j.cached && j.nd) v = j.cached.v;
-          else {
+          else if (j.cached && j.cached.sig !== undefined && (j.cached.v || Date.now() - j.cached.t < 3 * DAY)) {
+            v = j.cached.v; recheckThumb(j);   // shown straight away; checked against its folder once things are quiet
+          } else {
+            // making one reads folders and files through foobar2000: not while the list is moving
+            await calm(200);
+            if (j.alive && !safe(j.alive, true)) { j.resolve(null); continue; }
             const sig = thumbSig(j);
-            if (j.cached && j.cached.sig === sig && (j.cached.v || Date.now() - j.cached.t < 3 * DAY)) v = j.cached.v;
-            else {
-              v = await makeThumb(j);
-              if (v || !j.nd) idb.set(j.key, { t: Date.now(), v, sig });   // a server that didn't answer is asked again
-              await new Promise((r) => setTimeout(r, 0));   // breathe between decodes
-            }
+            v = await makeThumb(j);
+            if (v || !j.nd) idb.set(j.key, { t: Date.now(), v, sig });   // a server that didn't answer is asked again
+            await new Promise((r) => setTimeout(r, 0));   // breathe between decodes
           }
           memPut(j.key, v);
           j.resolve(v);
@@ -1463,6 +1676,7 @@ const Y2K = (() => {
   const ARTPL = 'Y2K art lookup';
   const isArtPl = (name) => String(name || '').startsWith(ARTPL);
   const embJobs = []; let embBusy = false;
+  const untilAsync = async (cond, ms) => { const t0 = Date.now(); while (!(await cond()) && Date.now() - t0 <= ms) await new Promise((r) => setTimeout(r, 40)); };
   const until = (cond, ms) => new Promise((res) => { const t0 = Date.now(); (function tick() { if (cond() || Date.now() - t0 > ms) res(); else setTimeout(tick, 40); })(); });
   const artPlName = () => ARTPL + ' · ' + (location.pathname.split('/').pop() || 'panel').replace(/\.html$/, '');
   // a helper left behind by a crash or an exit mid-batch
@@ -1480,17 +1694,18 @@ const Y2K = (() => {
       let pl = safe(() => H.findPlaylist(name), -1);
       if (pl < 0) pl = safe(() => H.createPlaylist(H.playlistCount, name), -1);
       if (pl < 0) { batch.forEach((j) => j.resolve('')); continue; }
-      safe(() => H.clearPlaylist(pl));
-      await until(() => safe(() => H.getPlaylistItemCount(pl), 0) === 0, 3000);
-      batch.forEach((j, k) => safe(() => H.addPath(pl, k, j.path, false)));
-      await until(() => safe(() => H.getPlaylistItemCount(pl), 0) >= batch.length, 5000);
+      // (all through HA: foobar2000 reading the files never holds up this panel)
+      const cnt = async () => +(await ha(() => HA.getPlaylistItemCount(pl), 0)) || 0;
+      await ha(() => HA.clearPlaylist(pl));
+      await untilAsync(async () => (await cnt()) === 0, 3000);
+      await Promise.all(batch.map((j, k) => ha(() => HA.addPath(pl, k, j.path, false))));
+      await untilAsync(async () => (await cnt()) >= batch.length, 5000);
       // match by path: unreadable files are skipped and cue sheets can expand
-      const n = safe(() => H.getPlaylistItemCount(pl), 0), at = new Map();
-      for (let i = 0; i < n; i++) { const p = safe(() => H.getPlaylistItemFormattedText(pl, i, '%path%'), '').toLowerCase(); if (p && !at.has(p)) at.set(p, i); }
+      const n = await cnt(), at = new Map();
+      for (let i = 0; i < n; i++) { const p = String((await ha(() => HA.getPlaylistItemFormattedText(pl, i, '%path%'), '')) || '').toLowerCase(); if (p && !at.has(p)) at.set(p, i); }
       for (const j of batch) {
         const i = at.get(j.path.toLowerCase());
-        j.resolve(i === undefined ? '' : safe(() => H.getPlaylistArtwork('front', pl, i), '') || '');
-        await new Promise((r) => setTimeout(r, 0));
+        j.resolve(i === undefined ? '' : (await ha(() => HA.getPlaylistArtwork('front', pl, i), '')) || '');
       }
     }
     const pl = safe(() => H.findPlaylist(name), -1);
@@ -1509,22 +1724,25 @@ const Y2K = (() => {
       is only sent once the previous one has landed. onItem(k, index) reports where path k went (a cue sheet adds
       several items at once); alive() returning false stops a load that has been superseded. */
   function insertInOrder(pl, paths, select, { onItem, done, alive } = {}) {
-    let k = 0;
-    const next = () => {
-      if (alive && !alive()) return;
-      if (k >= paths.length) { if (done) done(); return; }
-      const before = safe(() => H.getPlaylistItemCount(pl), 0), t0 = Date.now(), i = k++;
-      safe(() => H.addPath(pl, before, paths[i], select));
-      const wait = () => {
+    // through HA: while foobar2000 reads each file the panel doing the adding keeps drawing
+    const nap = (ms) => new Promise((r) => setTimeout(r, ms));
+    const count = async () => +(await ha(() => HA.getPlaylistItemCount(pl), 0)) || 0;
+    (async () => {
+      for (let i = 0; i < paths.length; i++) {
         if (alive && !alive()) return;
-        if (safe(() => H.getPlaylistItemCount(pl), 0) > before) { if (onItem) onItem(i, before); next(); }
-        else if (Date.now() - t0 > 1500) next(); // unreadable file: skip it
-        else setTimeout(wait, 4);
-      };
-      wait();
-    };
-    next();
+        const before = await count(), t0 = Date.now();
+        await ha(() => HA.addPath(pl, before, paths[i], select));
+        for (;;) {
+          if (alive && !alive()) return;
+          if (await count() > before) { if (onItem) onItem(i, before); break; }
+          if (Date.now() - t0 > 1500) break;   // unreadable file: skip it
+          await nap(4);
+        }
+      }
+      if (done) done();
+    })();
   }
+
   /** Append unique file paths to a playlist, in order (cue/subsong files are added once). */
   function addPaths(pl, paths, select = false) {
     insertInOrder(pl, [...new Set(paths.filter(Boolean))], select);
@@ -1533,6 +1751,7 @@ const Y2K = (() => {
   function playPaths(paths, startPath) { loadPaths(paths, startPath, true); }
   /** Replace "Library Selection" with these tracks; play, or just focus `startPath`. */
   let loadJob = 0;
+  const FILLING = 'y2k:filling';   // { name, n, t }: a playlist being refilled (see playlist.html)
   function loadPaths(paths, startPath, play) { loadList([...new Set(paths.filter(Boolean))], startPath, play); }
   /** loadPaths for a list that's already in shape (a saved playlist keeps a song it has twice). */
   function loadList(uniq, startPath, play) {
@@ -1541,12 +1760,15 @@ const Y2K = (() => {
     const start = Math.max(0, startPath ? uniq.indexOf(startPath) : 0);
     // a newer load (another double-click) cancels this one, so two albums never mix
     const job = ++loadJob, alive = () => job === loadJob;
+    // the playlist panel keeps showing what it has until the new list is all in, then swaps it in one go
+    safe(() => localStorage.setItem(FILLING, JSON.stringify({ name: LIBSEL, n: uniq.length, t: Date.now() })));
     safe(() => H.clearPlaylist(pl));
     // clearing is asynchronous too: wait for it, then insert track by track in order
     const t0 = Date.now();
-    const cleared = () => {
+    const cleared = async () => {
       if (!alive()) return;
-      if (safe(() => H.getPlaylistItemCount(pl), 0) !== 0 && Date.now() - t0 < 4000) { setTimeout(cleared, 10); return; }
+      if (+(await ha(() => HA.getPlaylistItemCount(pl), 0)) !== 0 && Date.now() - t0 < 4000) { setTimeout(cleared, 10); return; }
+      if (!alive()) return;
       safe(() => { H.activePlaylist = pl; });
       let started = false;
       // start playing (or focus) as soon as the chosen track has landed; the rest keep arriving behind it
@@ -1556,7 +1778,7 @@ const Y2K = (() => {
         if (play) { safe(() => H.executePlaylistDefaultAction(pl, i)); return; }
         safe(() => { H.clearPlaylistSelection(pl); H.selectPlaylistItem(pl, i); H.setFocusedPlaylistItem(pl, i); H.ensurePlaylistItemVisible(pl, i); });
       };
-      insertInOrder(pl, uniq, false, { alive, onItem: (k, index) => { if (k === start) begin(index); }, done: () => begin(0) });
+      insertInOrder(pl, uniq, false, { alive, onItem: (k, index) => { if (k === start) begin(index); }, done: () => { begin(0); if (alive()) safe(() => localStorage.removeItem(FILLING)); } });
     };
     cleared();
   }
@@ -1620,7 +1842,6 @@ const Y2K = (() => {
     }
     return out;
   }
-  const playSaved = (rec, startPath) => loadList(savedPaths(rec), startPath, true);
 
   /* A saved playlist and the foobar2000 playlist with the same name are linked: Library Selection writes every change
      made in that playlist (songs added, removed, moved) back to the saved one, and renaming either renames the other.
@@ -1637,12 +1858,12 @@ const Y2K = (() => {
     if (!taken(base)) return base;
     for (let k = 2; ; k++) if (!taken(base + ' (' + k + ')')) return base + ' (' + k + ')';
   }
-  /** Fill playlist n (by its name) with paths; then(added, wanted). */
-  function fillPlaylist(n, paths, then) {
+  /** Fill playlist n (by its name) with paths; then(added, wanted); onItem(k, index) as each path lands. */
+  function fillPlaylist(n, paths, then, onItem) {
     const name = lc(safe(() => H.getPlaylistName(n), ''));
     syncHold.add(name); noSync.delete(name);
     const before = safe(() => H.getPlaylistItemCount(n), 0);
-    insertInOrder(n, paths, false, { done: () => {
+    insertInOrder(n, paths, false, { onItem, done: () => {
       const added = safe(() => H.getPlaylistItemCount(n), 0) - before;
       if (added < paths.length) noSync.add(name);
       setTimeout(() => { syncHold.delete(name); if (then) then(added, paths.length); }, 1200);   // let its last change events pass first
@@ -1656,6 +1877,34 @@ const Y2K = (() => {
     if (n < 0) return -1;
     safe(() => { H.activePlaylist = n; });
     fillPlaylist(n, savedPaths(rec), then);
+    return n;
+  }
+  /** Play a saved playlist in a tab of its own, named after it (the open one if it's already open; otherwise a new
+      tab, linked like OPEN AS PLAYLIST), from startPath or its first song. Library Selection is left alone. */
+  function playSaved(rec, startPath, then) {
+    const paths = savedPaths(rec);
+    if (!paths.length) return -1;
+    let n = safe(() => H.findPlaylist(rec.name), -1);
+    if (n >= 0) {
+      let at = 0;
+      if (startPath) {
+        const l = safe(() => H.getPlaylistItemHandles(n), 0);
+        const ps = l ? safe(() => JSON.parse(H.formatMetaDBHandleList(l, '%path%')), []) : [];
+        if (l) safe(() => H.releaseMetaDBHandleList(l));
+        at = Math.max(0, ps.findIndex((x) => lc(x) === lc(startPath)));
+      }
+      safe(() => { H.activePlaylist = n; H.executePlaylistDefaultAction(n, at); });
+      if (then) then(-1, 0);
+      return n;
+    }
+    n = safe(() => H.createPlaylist(H.playlistCount, rec.name), -1);
+    if (n < 0) return -1;
+    safe(() => { H.activePlaylist = n; });
+    // start playing the moment the chosen song has landed; the rest keep arriving behind it
+    const start = Math.max(0, startPath ? paths.indexOf(startPath) : 0);
+    let started = false;
+    const begin = (i) => { if (!started) { started = true; safe(() => H.executePlaylistDefaultAction(n, i)); } };
+    fillPlaylist(n, paths, (added, wanted) => { begin(0); if (then) then(added, wanted); }, (k, index) => { if (k === start) begin(index); });
     return n;
   }
   function addSaved(rec) {
@@ -1840,7 +2089,7 @@ const Y2K = (() => {
         '<div class="spl-meta">' + r.n + (r.n === 1 ? ' track' : ' tracks') + ' · ' + esc(dur(r.secs)) + ' · saved ' + when(r.updated) + '</div>' +
         (r.file ? '<div class="spl-file' + (r.fileErr ? ' bad' : '') + '" title="' + esc(r.fileErr ? 'Last update failed: ' + r.fileErr : 'Rewritten after every change') + '"><em>' + (r.fileErr ? 'FILE NOT UPDATED' : 'FILE') + '</em>' + esc(r.file) + '</div>' : '') +
         (note && note.id === r.id ? '<div class="spl-note ' + note.cls + '">' + esc(note.text) + '</div>' : '') +
-        '<div class="spl-btns"><span class="logv-btn lime" data-act="play" title="Play it in Library Selection">▶ PLAY</span><span class="logv-btn" data-act="add" title="Add its tracks to the end of the current playlist">+ ADD</span>' +
+        '<div class="spl-btns"><span class="logv-btn lime" data-act="play" title="Play it in a playlist tab of its own, named after it (songs you add or remove there are saved here automatically)">▶ PLAY</span><span class="logv-btn" data-act="add" title="Add its tracks to the end of the current playlist">+ ADD</span>' +
         '<span class="logv-btn" data-act="open" title="Open it as a playlist tab: songs you add or remove there are saved here automatically">OPEN AS PLAYLIST</span>' +
         '<span class="logv-btn" data-act="export" title="' + (r.file ? 'Save it as an .m3u8 file somewhere else (that file is then the one kept up to date)' : 'Save it as an .m3u8 file; the file is then kept up to date when the playlist changes') + '">' + (r.file ? 'EXPORT AGAIN…' : 'EXPORT…') + '</span>' +
         (r.file ? '<span class="logv-btn" data-act="folder" title="Show the exported file\'s folder">FOLDER</span>' : '') +
@@ -1866,7 +2115,9 @@ const Y2K = (() => {
       if (ren) { ren.focus(); ren.select(); ren.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') doRename(); if (e.key === 'Escape') { renaming = false; drawDetail(); } }; }
       box.querySelector('.spl-btns').onclick = async (e) => {
         const act = e.target.dataset && e.target.dataset.act;
-        if (act === 'play') playSaved(r);
+        if (act === 'play') playSaved(r, '', (added, wanted) => {
+          if (added >= 0 && added < wanted) setNote(r.id, (wanted - added) + ' OF ' + wanted + ' SONGS COULDN\'T BE FOUND · THAT TAB WON\'T CHANGE THIS SAVED PLAYLIST', 'bad');
+        });
         else if (act === 'add') addSaved(r);
         else if (act === 'open') {
           openSaved(r, (added, wanted) => {
@@ -1968,15 +2219,32 @@ const Y2K = (() => {
 
   let scheme = 'lime', mode = 'mono', rawState = '';
   let from = [null, null, null], to = [null, null, null], fadeT = 1, fadeStart = 0, animating = false;
-  const FADE = 900, ease = (t) => t * t * (3 - 2 * t);
+  const FADE = 850, ease = (t) => t * t * (3 - 2 * t);
   const schemeFns = [], scopes = [];
-  /** Current colour of one of the skin's greens ([r,g,b]) in accent channel i — a blend while a fade is running. */
+  /* HOW A COLOUR CHANGE IS DRAWN: paint once, blend on the GPU.
+     Measured in the real panels while switching albums during playback: fading by rewriting the colours on every
+     frame made every panel re-rasterise everything coloured (glows, gradients, text) 30-75 times in under a second,
+     on top of the visualisers, and cost ~20 dropped frames per change in every visible panel. Switching the colours
+     in one go cost 0-1. So a change now repaints each panel ONCE, in the new colours, and the fade is done by the
+     compositor: the live panel fades in over a still picture of it in the old colours (a View Transition
+     snapshot) - a straight old -> new cross-fade, no hues in between, and nothing to re-raster per frame.
+     - Things that move (canvases, small running CSS animations, areas a panel marks with liveArea) are lifted above
+       the still picture, so they never freeze (see liveEls); the canvases fade their own colours in step (tint(),
+       the same straight blend on the same curve - they redraw every frame anyway, so that is free).
+     - A panel whose content changes during the fade, or that is scrolled / clicked, drops the old picture at once
+       (its colours are already final underneath): a picture never shows stale content.
+     - one clock: whoever changes the colour stamps a start time a moment ahead ('y2k:fadeAt', wall clock), and every
+       panel starts from that instant; a panel that hears late starts part-way through, in step. */
+  const mixRgb = (a, b, e) => a.map((v, k) => Math.round(v + (b[k] - v) * e));
+  /** Current colour of one of the skin's greens ([r,g,b]) in accent channel i, on the shared fade timeline. */
   function tint(rgb, i = 0) {
-    const a = tintWith(rgb, to[i] ?? to[0]);
-    if (fadeT >= 1) return a;
-    const b = tintWith(rgb, from[i] ?? from[0]), e = ease(fadeT);
-    return a.map((v, k) => Math.round(b[k] + (v - b[k]) * e));
+    const b = tintWith(rgb, to[i] ?? to[0]), p = progress();
+    return p >= 1 ? b : mixRgb(tintWith(rgb, from[i] ?? from[0]), b, ease(p));
   }
+  // where the shared timeline is right now (read from the clock, so any canvas asking mid-frame gets the true value)
+  const progress = () => fadeT >= 1 ? 1 : Math.min(1, Math.max(0, (performance.now() - fadeStart) / FADE));
+  /** Where the colours are heading: the finished colour of one of the skin's greens in channel i (no blend). */
+  const tintTo = (rgb, i = 0) => tintWith(rgb, to[i] ?? to[0]);
   function readState() {
     let id = safe(() => localStorage.getItem('y2k:scheme'), '');
     if (!PALETTES[id] && id !== 'album') id = 'lime';
@@ -1993,50 +2261,143 @@ const Y2K = (() => {
     const sp = specOf(st.id);
     return [sp, sp, sp];
   }
-  /* All the triplets go into one <style> element, rewritten once per frame: a single style invalidation instead of
-     ~25 per element. :root carries channel 0, [data-accent="i"] the others (common.css re-derives --lime-* there). */
+  /* All the triplets go into one <style> element. :root carries channel 0, [data-accent="i"] the others
+     (common.css re-derives --lime-* there). */
   const sheet = document.createElement('style');
   (document.head || document.documentElement).appendChild(sheet);
   const used = new Set();
-  function paint() {
-    const decl = (i) => ACCENTS.map((x, k) => '--c' + x + ':' + tint(ACCENT_RGB[k], i).join(',')).join(';');
+  function cssWith(at) {
+    const decl = (i) => ACCENTS.map((x, k) => '--c' + x + ':' + at(ACCENT_RGB[k], i).join(',')).join(';');
     let css = ':root{' + decl(0) + '}';
     used.forEach((i) => { css += '[data-accent="' + i + '"]{' + decl(i) + '}'; });
-    sheet.textContent = css;
-    schemeFns.forEach((fn) => safe(() => fn(scheme)));
+    return css;
   }
-  /* The deck and the seek bar fade at full frame rate; the busy list panels (thousands of rows) restyle at ~25 fps
-     so they don't starve the deck, which shares their rendering thread. */
-  let fadeFps = 25, lastPaint = 0;
-  const fadePriority = () => { fadeFps = 0; };
-  function step(now) {
-    fadeT = Math.min(1, (now - fadeStart) / FADE);
-    if (fadeT >= 1 || !fadeFps || now - lastPaint >= 1000 / fadeFps - 4) { lastPaint = now; paint(); }
-    if (fadeT < 1) requestAnimationFrame(step); else animating = false;
+  const writeSheet = (css) => { if (sheet.textContent !== css) sheet.textContent = css; };
+  let lookReady = false; // the look section below is set up after this one
+  // the page's colours, final (the DOM is only ever painted in finished colours; the fade is the snapshot's)
+  function paintDom() {
+    writeSheet(cssWith(tintTo));
+    if (lookReady && (look.chrome === 'accent' || look.caps === 'accent')) applyLook(tintTo);
   }
+  const canvasFrame = () => schemeFns.forEach((fn) => safe(() => fn(scheme)));
+  // panels with canvases (deck, seek bar) re-read tint() every frame of a fade; the others have nothing to animate
+  let prio = false;
+  const fadePriority = () => { prio = true; };
+  function step() {
+    fadeT = progress();
+    if (prio) canvasFrame();
+    if (fadeT < 1) requestAnimationFrame(step); else { animating = false; if (!prio) canvasFrame(); }
+  }
+
+  /* ---- the old-colours picture (View Transition with the root cross-fading as old-over-live) */
+  const liveSel = [];
+  /** Mark areas of this panel that change all the time (a clock, a lyric line): they are kept live during a fade. */
+  const liveArea = (...sel) => liveSel.push(...sel);
+  const vtCss = document.createElement('style');
+  (document.head || document.documentElement).appendChild(vtCss);
+  const EASE_IN = 'linear(' + Array.from({ length: 21 }, (_, k) => ease(k / 20).toFixed(4) + ' ' + k * 5 + '%').join(',') + ')';
+  let vt = null;
+  /* What moves is lifted above the old picture instead of frozen in it: canvases and small running CSS animations
+     (spinners, blinkers) and marked live areas get a view-transition name of their own and show only live. Their
+     see-through parts show the fading background beneath. A backdrop with page content on top of it is marked
+     data-fade="ghost" and fades with the rest. */
+  function liveEls() {
+    const vw = innerWidth, vh = innerHeight, out = new Set();
+    const add = (el, big) => {
+      if (!el || !el.getBoundingClientRect || el.closest('[data-fade="ghost"]')) return;
+      const r = el.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1 || r.right < 0 || r.bottom < 0 || r.left > vw || r.top > vh) return;
+      if (!big && r.width * r.height > vw * vh * 0.06) return; // a big animated backdrop: fades with the rest
+      // inline bits (a blinking clock colon) are rewritten with their text: a lifted element that is replaced
+      // mid-fade makes the browser abandon the whole transition, so those stay in the picture
+      if (!big && getComputedStyle(el).display === 'inline') return;
+      out.add(el);
+    };
+    document.querySelectorAll('canvas').forEach((c) => add(c, true));
+    liveSel.forEach((sel) => document.querySelectorAll(sel).forEach((el) => add(el, true)));
+    safe(() => document.getAnimations().forEach((a) => {
+      const t = a.effect && a.effect.target, it = a.effect && a.effect.getTiming ? a.effect.getTiming().iterations : 1;
+      // (an animation on a ::before / ::after can't be lifted on its own - lifting its element would lift too much)
+      if (t && t.nodeType === 1 && !a.effect.pseudoElement && a.playState === 'running' && it === Infinity) add(t, false);
+    }));
+    // nested ones ride along with their lifted ancestor
+    return [...out].filter((el) => ![...out].some((o) => o !== el && o.contains(el)));
+  }
+  function fadeDom(late) {
+    if (vt) safe(() => vt.skipTransition());
+    vt = null;
+    if (!document.startViewTransition || document.hidden || late >= FADE - 50) { paintDom(); return; }
+    const live = liveEls();
+    live.forEach((el, k) => { el.style.viewTransitionName = 'y2klive' + k; });
+    // the live page (new colours) fades in over the still picture of the old one; lifted elements show only live
+    const names = live.map((_, k) => 'y2klive' + k), each = (pe) => names.map((n) => '::view-transition-' + pe + '(' + n + ')').join(',');
+    vtCss.textContent = '::view-transition{pointer-events:none}' +
+      '::view-transition-group(root){animation:none}' +
+      '::view-transition-old(root){animation:none;opacity:1;mix-blend-mode:normal}' +
+      '::view-transition-new(root){mix-blend-mode:normal;animation:y2kfade ' + FADE + 'ms ' + EASE_IN + ' -' + Math.round(late) + 'ms both}' +
+      '@keyframes y2kfade{from{opacity:0}to{opacity:1}}' +
+      (names.length ? each('group') + '{animation:none}' + each('old') + '{display:none}' + each('new') + '{animation:none;opacity:1;mix-blend-mode:normal}' : '');
+    let painted = false;
+    const unname = () => live.forEach((el) => { el.style.viewTransitionName = ''; });
+    const t = safe(() => document.startViewTransition(() => { painted = true; paintDom(); }), null);
+    if (!t) { unname(); paintDom(); return; }
+    vt = t;
+    // drop the picture early if the panel changes under it, or is scrolled / clicked
+    const stop = () => { if (vt === t) safe(() => t.skipTransition()); };
+    const mo = prio ? null : new MutationObserver(stop);
+    const evs = prio ? ['wheel', 'pointerdown', 'keydown'] : ['wheel', 'scroll', 'pointerdown', 'keydown']; // (the deck scrolls things itself)
+    t.ready.then(() => {
+      if (mo && document.body) mo.observe(document.body, { childList: true, subtree: true, characterData: true });
+      evs.forEach((e) => addEventListener(e, stop, { capture: true, passive: true }));
+    }, () => {});
+    t.finished.finally(() => { unname(); if (mo) mo.disconnect(); evs.forEach((e) => removeEventListener(e, stop, { capture: true })); if (vt === t) vt = null; });
+    // a panel that isn't being drawn never takes the picture: don't wait for it
+    setTimeout(() => { if (!painted) stop(); }, 300);
+  }
+
+  /* The shared start: stamped by whichever panel makes the change, a little ahead so the news (a storage event,
+     a few ms) reaches every panel before the fade begins. */
+  const FADE_LEAD = 90;
+  const stampFade = () => safe(() => localStorage.setItem('y2k:fadeAt', String(Date.now() + FADE_LEAD)));
+  function sharedStart() {
+    const at = +safe(() => localStorage.getItem('y2k:fadeAt'), 0), now = Date.now();
+    const wall = at && at > now - FADE * 2 && at < now + 1000 ? at : now; // no fresh stamp: start now
+    return performance.now() + (wall - now);
+  }
+  let startTimer = 0;
   /** Re-reads the stored choice and fades to it (instantly on first load). */
   function applyScheme(instant) {
     const st = readState(), raw = JSON.stringify([st.id, st.m, st.ap]);
     if (raw === rawState && instant !== true) return;
     rawState = raw; scheme = st.id; mode = st.m;
     const t = targets(st);
-    if (instant === true) { from = to = t; fadeT = 1; paint(); return; }
-    if (JSON.stringify(t) === JSON.stringify(to)) { schemeFns.forEach((fn) => safe(() => fn(scheme))); return; }
-    from = fadeT >= 0.5 ? to : from; to = t; fadeT = 0; fadeStart = performance.now();
-    if (!animating) { animating = true; requestAnimationFrame(step); }
-    setTimeout(() => { if (fadeT < 1) { fadeT = 1; animating = false; paint(); } }, FADE + 600); // hidden panels get no frames
+    if (instant === true) { from = to = t; fadeT = 1; paintDom(); applyLook(); canvasFrame(); return; }
+    if (JSON.stringify(t) === JSON.stringify(to)) { canvasFrame(); return; }
+    // a change mid-fade sets off from where the last one was heading (the page's colours are already there)
+    from = to; to = t; fadeT = 0; fadeStart = sharedStart();
+    clearTimeout(startTimer);
+    const begin = () => {
+      const late = performance.now() - fadeStart;
+      fadeDom(Math.max(0, late));
+      if (document.hidden || late >= FADE) { fadeT = 1; canvasFrame(); return; } // nobody to fade for / already over
+      if (!animating) { animating = true; requestAnimationFrame(step); }
+      setTimeout(() => { if (fadeT < 1) { fadeT = 1; animating = false; canvasFrame(); } }, FADE - late + 600); // hidden panels get no frames
+    };
+    const wait = fadeStart - performance.now();
+    if (wait > 1) startTimer = setTimeout(begin, wait); else begin();
   }
-  function setScheme(id) { safe(() => localStorage.setItem('y2k:scheme', id)); applyScheme(); }
-  function setSchemeMode(m) { safe(() => localStorage.setItem('y2k:schemeMode', m === 'multi' ? 'multi' : 'mono')); applyScheme(); }
+  function setScheme(id) { stampFade(); safe(() => localStorage.setItem('y2k:scheme', id)); applyScheme(); }
+  function setSchemeMode(m) { stampFade(); safe(() => localStorage.setItem('y2k:schemeMode', m === 'multi' ? 'multi' : 'mono')); applyScheme(); }
   /** Called by the deck with the colours it read from the current cover. */
   function setAlbumPalette(key, accents) {
     const cur = safe(() => JSON.parse(localStorage.getItem('y2k:albumPal')), null);
     if (cur && JSON.stringify(cur.accents) === JSON.stringify(accents)) return;
+    stampFade();
     safe(() => localStorage.setItem('y2k:albumPal', JSON.stringify({ key, accents })));
     applyScheme();
   }
   /** Give an element (and everything inside it) accent channel i. */
-  function scopeAccent(el, i) { if (!el) return; el.setAttribute('data-accent', i); scopes.push([el, i]); used.add(i); paint(); }
+  function scopeAccent(el, i) { if (!el) return; el.setAttribute('data-accent', i); scopes.push([el, i]); used.add(i); paintDom(); }
   const onSchemeChange = (fn) => schemeFns.push(fn);
 
   /* ------------------------------------------------------------------ look: finish + chrome + header colours
@@ -2060,14 +2421,15 @@ const Y2K = (() => {
     const o = safe(() => JSON.parse(localStorage.getItem('y2k:look')), null) || {};
     return { mode: o.mode === 'dark' ? 'dark' : 'light', chrome: LOOK_CHROME[o.chrome] ? o.chrome : 'silver', caps: LOOK_CAPS[o.caps] ? o.caps : 'steel' };
   };
-  const accentHue = () => rgb2hsl(tint([156, 255, 46], 0))[0];
+  // the chrome / header colours follow the theme colour's FINAL hue (written once, inside the colour fade's snapshot)
+  const accentHue = (at = tintTo) => rgb2hsl(at([156, 255, 46], 0))[0];
   const lookSheet = document.createElement('style');
   (document.head || document.documentElement).appendChild(lookSheet);
   let lookCss = '', look = lookState();
-  function applyLook() {
+  function applyLook(at = tintTo) {
     look = lookState();
     const ch = LOOK_CHROME[look.chrome], cp = LOOK_CAPS[look.caps], ink = INK[look.mode];
-    const chH = look.chrome === 'accent' ? accentHue() : ch.h, cpH = look.caps === 'accent' ? accentHue() : cp.h;
+    const chH = look.chrome === 'accent' ? accentHue(at) : ch.h, cpH = look.caps === 'accent' ? accentHue(at) : cp.h;
     const hex = (rgb) => '#' + rgb.map((v) => v.toString(16).padStart(2, '0')).join('');
     const surf = (x) => { // keep each shade's lightness, give it the chrome's hue
       const rgb = hexRgb(x); if (chH == null) return '#' + x;
@@ -2086,9 +2448,7 @@ const Y2K = (() => {
   }
   /** Changes part of the look ({ mode, chrome, caps }); every panel follows within a moment. */
   function setLook(patch) { safe(() => localStorage.setItem('y2k:look', JSON.stringify(Object.assign(lookState(), patch)))); applyLook(); }
-  applyLook();
-  schemeFns.push(() => { if (look.chrome === 'accent' || look.caps === 'accent') applyLook(); });
-
+  lookReady = true;
   applyScheme(true);
   window.addEventListener('storage', (e) => {
     if (/^y2k:(scheme|schemeMode|albumPal)$/.test(e.key || '')) applyScheme();
@@ -2097,16 +2457,46 @@ const Y2K = (() => {
   setInterval(applyScheme, 1500);
   setInterval(applyLook, 1500);
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
   return {
-    PALETTES, tint, applyScheme, setScheme, fadePriority, setSchemeMode, setAlbumPalette, scopeAccent, specFor, rgb2hsl, onSchemeChange,
+    PALETTES, tint, applyScheme, setScheme, fadePriority, liveArea, bootHold, setSchemeMode, setAlbumPalette, scopeAccent, specFor, rgb2hsl, onSchemeChange,
     get scheme() { return scheme; }, get schemeMode() { return mode; },
     LOOK_CHROME, LOOK_CAPS, setLook, applyLook, get look() { return look; },
     thumb, embeddedArt, isArtPl, findDirArtFile, idb, onRipLog, showRipLog, closeRipLog, ripLogText, countryCode, mediaLabel, addPaths, playPaths, loadPaths, playlistIndexByName, toFwd, SEP,
     savedDb, savePlaylist, appendSaved, playSaved, openSaved, addSaved, showSavedPlaylists, themedWindow,
     syncHold, noSync, fillPlaylist, exportSaved, m3uText, freePlaylistName,
-    H, BS, esc, log, safe, getTrack, listDir, readText, readImage, resolveArt, findRipLog, parseRipLog,
+    H, BS, esc, log, safe, getTrack, listDir, readText, readImage, resolveArt, prepareArt, findRipLog, parseRipLog,
     countryName, flagHTML, flagFile, barcodeSVG, mb, getJSON, store, artistCountry, openUrl, openFile, runCommand, runFb2k, VERSION, checkUpdate,
     ND_KEY, ndCfg, nd, ndCover, ndStream, ndSongs, ndPaths, ndPlaylists, ndPlaylist, ndSongId, ndAddToPlaylist, ndAllAlbums, ndConnect, ndForget,
-    fmtTime, qualityOf, firstOf, clean, debounce, onTrackContextChange, trackKey, profileDir, exePath, DAY, parseLRC, lyricWords, lyricsFind, lyricsNow, lyricsSource, isSyncedText, findMediaArt, smallImage,
+    fmtTime, qualityOf, firstOf, clean, debounce, onTrackContextChange, trackKey, pb, FILLING, profileDir, exePath, DAY, parseLRC, lyricWords, lyricsFind, lyricsNow, lyricsSource, isSyncedText, findMediaArt, smallImage,
   };
 })();

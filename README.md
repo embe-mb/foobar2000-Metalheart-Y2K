@@ -45,11 +45,12 @@ Get **`Metalheart-Y2K-theme.zip`** from the [Releases page](../../releases/lates
 During step 3 the installer:
 - downloads the components the theme needs, straight from their official pages;
 - copies the theme files into your foobar2000 settings folder;
+- builds the **Metalheart** launcher on your PC from its source, with the C# compiler that comes with Windows (no program is downloaded), and makes a **Metalheart** shortcut on the Desktop and in the Start menu. Start foobar2000 from it to get the splash screen;
 - starts foobar2000.
 
 After step 4 it applies the Metalheart layout on its own.
 
-Your previous Columns UI settings are backed up first, to `<settings folder>\metalheart-backup\<date>\`.
+Your previous Columns UI settings are backed up first, to `<settings folder>\metalheart-backup\<date>\`. When you update, your own layout (panel sizes and so on) is kept unless the new version changes the Metalheart layout.
 
 > Windows may warn about a downloaded script. Choose **More info > Run anyway**. The installer is plain PowerShell, and you can read it in [`installer/Install-Metalheart.ps1`](installer/Install-Metalheart.ps1).
 
@@ -69,6 +70,7 @@ Your previous Columns UI settings are backed up first, to `<settings folder>\met
 7. Optionally, for the clean look, untick these in the **View** menu:
    1. **Show status pane**.
    2. **Show toolbars**. This also hides the menu bar; the PREFS button in the control pod still opens Preferences.
+8. Optionally, for the splash screen and the Metalheart shortcuts, run `powershell -ExecutionPolicy Bypass -File "<settings folder>\webview\y2k\splash\src\build.ps1" -Shortcuts`.
 
 ### Going back
 
@@ -122,6 +124,7 @@ This theme is primarily catered to those who use MusicBrainz Picard and scrobble
   - **Lyrics:** synced lyrics with word-by-word highlighting. When a song has none yet, the theme searches **LRCLIB**, **NetEase** and **QQ Music** for synced lyrics itself, so they show up within seconds. OpenLyrics stays alongside it for manual searches, editing and plain lyrics (it runs from a 2-pixel panel tucked under the tabs, because it only works while one of its own panels is on screen).
   - **Artist Bio:** biography and discography; click an album to play it from your library or Navidrome.
   - **Tags**, and **MilkDrop** (about 900 public domain presets) in its own window.
+- **Metalheart launcher and splash screen.** Start foobar2000 from the Metalheart shortcut and the animated chrome logo covers the window while the panels load. Metalheart gets its own taskbar button and icon, and shows up in Windows' **Default apps** as a music player you can pick for your audio and playlist files.
 - **Updates itself.** The deck tells you when a new version is out and can download and install it for you. Your settings are also backed up to a file and restored if foobar2000 ever loses them. See the [changelog](CHANGELOG.md).
 
 The full guide is in [`README - METALHEART Y2K.txt`](README%20-%20METALHEART%20Y2K.txt).
@@ -132,6 +135,7 @@ The full guide is in [`README - METALHEART Y2K.txt`](README%20-%20METALHEART%20Y
 |---|---|
 | `Install Metalheart Y2K.cmd`, `installer/` | The installer. |
 | `profile/webview/y2k/` | The HTML/JS/CSS panels, plus the Columns UI layouts in `layouts/`. |
+| `profile/webview/y2k/splash/` | The Metalheart launcher: its source (`src/`), logo and icon. The installer builds it. |
 | `profile/milkdrop2/` | The MilkDrop preset and texture pack. |
 
 ## Licence

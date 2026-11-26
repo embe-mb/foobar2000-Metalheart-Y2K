@@ -1,5 +1,51 @@
 # Changelog
 
+## v1.7 — 2026-11-26
+
+> **Updating from v1.6:** press **DOWNLOAD & INSTALL** on the notice at the top of the deck, or go to **CUSTOMIZE DECK › SCREEN › PERFORMANCE › Theme version**. To install by hand, close foobar2000, extract `Metalheart-Y2K-theme.zip` and run **`Install Metalheart Y2K.cmd`**. Your deck settings, caches, saved playlists and library aren't touched, and **your layout is kept** (panel sizes and so on), because the Metalheart layout hasn't changed in this version. The update also builds the new **Metalheart** launcher on your PC and adds its shortcuts.
+
+<img width="720" alt="The Metalheart splash screen: the chrome logo with a lens flare" src="https://raw.githubusercontent.com/embe-mb/foobar2000-Metalheart-Y2K/main/docs/v1.7/splash.gif" />
+
+### New
+
+**Metalheart: a launcher with a splash screen**
+
+- Start foobar2000 from the new **Metalheart** shortcut (Desktop and Start menu). The animated chrome logo, with its sheen and lens flare, covers the window while the panels load, then fades away once every panel has drawn. Click it or press Esc to skip it.
+- **Taskbar:** Metalheart has its own icon, and a pinned Metalheart and the running player are one taskbar button.
+- **Default apps:** Metalheart shows up in **Settings › Apps › Default apps** as a music player for the common audio and playlist types (mp3, flac, m4a, ogg, opus, wav, cue, m3u8…). Windows never lets a program make itself the default, so nothing changes until you pick it. Files you open with it go through the splash, or straight to the player if it's already running.
+- **Built on your PC:** the theme ships Metalheart as source code, not as a program. The installer builds it with the C# compiler that comes with Windows, so nothing is downloaded and there's no unsigned program to trust. Untick **Metalheart shortcuts** in the installer if you don't want the shortcuts.
+
+<img width="520" alt="The installer with the new Metalheart shortcuts option" src="https://raw.githubusercontent.com/embe-mb/foobar2000-Metalheart-Y2K/main/docs/v1.7/installer.png" />
+
+**MULTI FORMAT albums**
+
+- When an album's files in one folder are in more than one format (FLAC rips plus MP3 bonus tracks, say), the Media Library shows it as one album marked **MULTI FORMAT**, and Library Selection keeps it as one group. Copies of an album in separate folders stay separate versions.
+
+<img width="540" alt="A MULTI FORMAT album in the Media Library" src="https://raw.githubusercontent.com/embe-mb/foobar2000-Metalheart-Y2K/main/docs/v1.7/library-multi-format.png" />
+
+<img width="900" alt="The same album in Library Selection: one group, FLAC and MP3 tracks" src="https://raw.githubusercontent.com/embe-mb/foobar2000-Metalheart-Y2K/main/docs/v1.7/selection-multi-format.png" />
+
+**Saved playlists play in their own tab**
+
+- **▶ PLAY** on a saved playlist opens it in a tab named after it (the same tab again if it's already open) and leaves Library Selection alone. Songs you add or remove in that tab are saved to the playlist automatically.
+
+<img width="860" alt="The saved playlists window" src="https://raw.githubusercontent.com/embe-mb/foobar2000-Metalheart-Y2K/main/docs/v1.7/saved-play.png" />
+
+<img width="900" alt="The saved playlist playing in its own Road Trip tab" src="https://raw.githubusercontent.com/embe-mb/foobar2000-Metalheart-Y2K/main/docs/v1.7/saved-play-tab.png" />
+
+### Smoother and faster
+
+- **Colour changes:** with the ALBUM ART theme colour, the skin now changes colour in one straight cross-fade instead of passing through other hues. The panels are redrawn once and the graphics card does the blend, so the visualisers keep their frame rate. The fade waits until the new title is in.
+- **No more pause when a new album starts.** A big cover (several MB) used to be read through foobar2000 at the moment the album started, which held up every panel for up to a second. Each cover is now made once into a display-size copy, read straight from disk and kept, so the next time the album plays it shows at once. Albums you open in the Media Library get their cover ready before you press play.
+- **Scrolling:** the Media Library's album grid, Library Selection and the Track Info tabs scroll without the hitches they had. New album thumbnails are made once the list stops moving.
+- **Library Selection** keeps the old list on screen while an album loads, then swaps to the new one in one go, instead of filling in row by row.
+- The seek bar, deck, lyrics and the rest no longer ask foobar2000 for the playback position every frame, so one busy panel can't make the others stutter.
+
+### Installer
+
+- Builds the Metalheart launcher and, unless you untick it, makes its shortcuts.
+- **Keeps your layout when you update** (panel sizes and so on), as long as the new version doesn't change the Metalheart layout. Before, every update imported the layout again.
+
 ## v1.6 — 2026-11-07
 
 > **Updating from v1.5:** press **DOWNLOAD & INSTALL** on the notice at the top of the deck, or go to **CUSTOMIZE DECK › SCREEN › PERFORMANCE › Theme version**. To install by hand, close foobar2000, extract `Metalheart-Y2K-theme.zip` and run **`Install Metalheart Y2K.cmd`**. Your deck settings, caches, saved playlists and library aren't touched. Album thumbnails are rebuilt once as you scroll, because the thumbnail cache changed.

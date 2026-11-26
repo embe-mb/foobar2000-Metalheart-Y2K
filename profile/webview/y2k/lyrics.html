@@ -54,7 +54,7 @@
 
 <script>/* inside the Track Info panel this page runs in a frame: use the panel's connection to foobar2000 */
 if (window.parent !== window) try { const P = window.parent; Object.defineProperty(window, 'chrome', { value: P.chrome, configurable: true, writable: true }); window.fb2k = P.fb2k; } catch (e) {}</script>
-<script src="common.js?v=31"></script>
+<script src="common.js?v=47"></script>
 <script>
 'use strict';
 const { esc, safe, H } = Y2K;
@@ -216,8 +216,8 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(
 /* ---------------- wiring ---------------- */
 function refresh() { cur = Y2K.getTrack(); load(false); }
 function poll() {
-  const playing = safe(() => H.isPlaying, false), paused = safe(() => H.isPaused, false);
-  pos = playing ? safe(() => H.position, 0) : 0; posAt = performance.now(); running = playing && !paused;
+  const P = Y2K.pb(), playing = P.playing, paused = P.paused;   // (Y2K.pb: no waiting on foobar2000)
+  pos = playing ? P.pos : 0; posAt = performance.now(); running = playing && !paused;
   if (cur && cur._src === 'playing') load(false);
 }
 Y2K.onTrackContextChange(() => refresh());
