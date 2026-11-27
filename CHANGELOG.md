@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.7.1 — 2026-11-27
+
+> A hotfix for v1.7. **Updating:** press **DOWNLOAD & INSTALL** on the notice at the top of the deck, or go to **CUSTOMIZE DECK › SCREEN › PERFORMANCE › Theme version**. Your settings, caches, saved playlists and layout are kept.
+
+### Fixed
+
+- **Beat sync no longer skips.** v1.7's playback clock took foobar2000's once-a-second time update as the exact position. That update only carries the whole second and arrives about 0.2 s late, so the beat clock was pulled back and forth every second, and the visualiser effects hit twice, missed a beat or jumped to resync. The clock now ignores that update unless it's far off, and eases in small corrections. In testing, mistimed beats went from about 1 in 8 to none, and the clock stays within about 20 ms of the real position. The seek bar and synced lyrics use the same clock and are steadier too.
+- **The colours change with every album again.** Sometimes, when a new album started, the skin kept the old album's colours until you double-clicked the song. The new cover could arrive twice in quick succession, and the second copy cancelled the colour read the first one had started. The deck now ignores a repeat of the cover it's already showing, and tries again if a colour read is interrupted.
+
+### Improved
+
+- **Live tempo (streams and files the scanner can't read).** Each second's tempo estimate is now a vote in a running tally for the track, an approach used by the open-source [bpm-detector](https://github.com/libraz/bpm-detector). One odd second, like a fill or a break, can't knock the tempo off any more, and a settled tempo keeps the beat lock through quiet passages. The beat position is also eased in, instead of being worked out again from scratch every second.
+- **Variable-bitrate MP3s** update twice a second with their bitrate. Each update used to redraw the whole deck; now it changes only the KBPS readout.
+
 ## v1.7 — 2026-11-26
 
 > **Updating from v1.6:** press **DOWNLOAD & INSTALL** on the notice at the top of the deck, or go to **CUSTOMIZE DECK › SCREEN › PERFORMANCE › Theme version**. To install by hand, close foobar2000, extract `Metalheart-Y2K-theme.zip` and run **`Install Metalheart Y2K.cmd`**. Your deck settings, caches, saved playlists and library aren't touched, and **your layout is kept** (panel sizes and so on), because the Metalheart layout hasn't changed in this version. The update also builds the new **Metalheart** launcher on your PC and adds its shortcuts.

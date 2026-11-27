@@ -755,7 +755,7 @@
   </div>
 </div>
 
-<script src="common.js?v=47"></script>
+<script src="common.js?v=49"></script>
 <script>
 /* ---------------- fitting the deck to its window ----------------
    The deck is laid out for a strip about 420 px high. In a narrow window (e.g. on a vertical monitor) the cover
@@ -878,6 +878,16 @@ function measureTitle(el) {
 
 function led(id, on) { $(id).classList.toggle('on', !!on); }
 
+function setCodecline(t, q) {
+  $('codecline').textContent = [t.codec + (t.codecprofile ? ' ' + t.codecprofile : ''), q.bits ? q.bits + '-BIT' : '', q.khz ? q.khz + ' KHZ' : '', t.bitrate ? t.bitrate + ' KBPS' : '', (t.channels || '').toUpperCase()].filter(Boolean).join(' · ');
+}
+// a VBR file's live bitrate: only the readout is updated (the whole deck isn't redrawn for it)
+fb2k.on('playback:dynamicInfo', async () => {
+  if (!cur || cur._src !== 'playing') return;
+  const t = cur; let br = '';
+  try { br = String((await chrome.webview.hostObjects.foo_uie_webview.nowPlaying('%bitrate%')) || ''); } catch (e) { return; }
+  if (cur === t && br && br !== String(t.bitrate || '')) { t.bitrate = br; setCodecline(t, Y2K.qualityOf(t)); }
+});
 function render() {
   const t = Y2K.getTrack();
   cur = t;
@@ -911,7 +921,7 @@ function render() {
 
   const q = Y2K.qualityOf(t);
   setMd5((t.md5 || '').toLowerCase());
-  $('codecline').textContent = [t.codec + (t.codecprofile ? ' ' + t.codecprofile : ''), q.bits ? q.bits + '-BIT' : '', q.khz ? q.khz + ' KHZ' : '', t.bitrate ? t.bitrate + ' KBPS' : '', (t.channels || '').toUpperCase()].filter(Boolean).join(' · ');
+  setCodecline(t, q);
   led('ledLossless', q.lossless); led('ledHires', q.hires);
   led('ledMB', !!(t.mb_release || t.mb_recording));
 
@@ -1236,7 +1246,8 @@ function karaokeTick() {
 function showArt(a) {
   if (a.pending) return;   // its display copy is being made (Y2K.resolveArt calls back): the cover shown stays until then
   const img = $('art');
-  if (a.src) { img.src = a.src; img.classList.remove('hidden'); $('noart').classList.add('hidden'); }
+  // setting the same picture again restarts the <img> and cancels a colour read already running on it
+  if (a.src) { if (img.getAttribute('src') !== a.src) img.src = a.src; img.classList.remove('hidden'); $('noart').classList.add('hidden'); }
   else { img.removeAttribute('src'); img.classList.add('hidden'); $('noart').classList.remove('hidden'); }
   mediaArt = a.src || ''; paintMediaArt();
   if (a.src) readCoverColours(a.src, cur ? cur._key : '', coverMemoKey(cur, a));
@@ -1301,11 +1312,17 @@ function readCoverColours(src, key, mk = '') {
   }
   if (src === coverLastSrc) return; // this cover is being read already
   const my = ++coverSeq; coverLastSrc = src;
-  const art = $('art'), im = art && art.getAttribute('src') === src ? art : Object.assign(new Image(), { decoding: 'async', src });
-  im.decode().then(() => {
+  const art = $('art'), own = () => Object.assign(new Image(), { decoding: 'async', src });
+  const read = (im, retry) => im.decode().then(() => {
     if (my !== coverSeq) return;
     try { const acc = coverAccents(im); rememberCover(src, mk, acc); afterTitle(() => { if (my === coverSeq) Y2K.setAlbumPalette(key, acc); }); } catch (e) {}
-  }, () => { if (my === coverSeq) coverLastSrc = ''; });
+  }, () => {
+    // the deck's <img> was restarted under the read (or the decode failed): read it once more from a picture of its
+    // own; giving up here left the old album's colours on until the deck happened to redraw
+    if (my !== coverSeq) return;
+    if (retry) read(own(), false); else coverLastSrc = '';
+  });
+  read(art && art.getAttribute('src') === src ? art : own(), true);
 }
 
 // the year display: the digits plus an all-segments-on copy behind them (the unlit segments of a real display)
@@ -3472,8 +3489,8 @@ function drawReactor(w, h, S, dt, active, hit, pal) {
    the source's grid, so the centerpieces and the pod screen can lock to the beat. */
 const BEAT_FMT = '%path%|$if2(%subsong%,0)|$if2(%filesize%,0)|%length_seconds_fp%'; // same key as seekbar.html
 const BT = { key: '', scan: null, tag: 0, pos: 0, posT: 0, running: false, bpm: 0, src: '', lock: false, b: 0, on: false, phase: 0, pulse: 0, flashT: 0 };
-const LV = { env: new Float32Array(512), slot: -1, prev: new Float32Array(8), bpm: 0, per: 0, anchor: 0, cand: 0, votes: 0, next: 0, conf: 0 };
-function liveReset() { LV.env.fill(0); LV.slot = -1; LV.bpm = 0; LV.per = 0; LV.votes = 0; LV.conf = 0; LV.cand = 0; }
+const LV = { env: new Float32Array(512), slot: -1, prev: new Float32Array(8), bpm: 0, per: 0, anchor: 0, next: 0, conf: 0, hist: new Float32Array(521), share: 0, n: 0, flip: 0 };
+function liveReset() { LV.env.fill(0); LV.slot = -1; LV.bpm = 0; LV.per = 0; LV.conf = 0; LV.hist.fill(0); LV.share = 0; LV.n = 0; LV.flip = 0; }
 function readBeat() {
   const o = safe(() => JSON.parse(localStorage.getItem('y2k:beat')), null);
   BT.scan = o && o.key === BT.key && !o.none && o.bpm > 0 ? o : null;
@@ -3491,7 +3508,7 @@ function beatPoll() {
   if (key && !BT.scan) readBeat();
   if (playing && !paused) {
     const p = P.pos, now = performance.now(), pred = BT.pos + (now - BT.posT) / 1000;
-    if (!BT.running || Math.abs(p - pred) > 0.12) { BT.pos = p; BT.posT = now; } else BT.pos += (p - pred) * 0.15;
+    if (!BT.running || Math.abs(p - pred) > 0.3) { BT.pos = p; BT.posT = now; } else BT.pos += (p - pred) * 0.15;
     BT.running = true;
   } else BT.running = false;
   const el = $('bpm');
@@ -3505,7 +3522,7 @@ function beatPoll() {
 }
 ['playback:trackChanged', 'playback:starting', 'playback:stopped', 'playback:dynamicInfo'].forEach((ev) => fb2k.on(ev, () => { BT.keyStale = true; }));
 setInterval(beatPoll, 250);
-fb2k.on('playback:seeked', () => { BT.running = false; beatPoll(); });
+fb2k.on('playback:seeked', () => { BT.running = false; LV.per = 0; beatPoll(); }); // a seek: the live beat phase is found afresh
 
 // live tempo: rises in the low bands form an onset curve (50 per second, 10 s ring); every second its
 // autocorrelation picks the tempo and folding the last 6 s at that period gives the beat phase
@@ -3543,14 +3560,37 @@ function liveTempo(slot) {
     }
     best = bb;
   }
-  LV.conf = LV.conf * 0.6 + Math.min(1, acI(3000 / best) / a0) * 0.4;
-  if (!LV.bpm || Math.abs(best - LV.bpm) / LV.bpm < 0.03) { LV.bpm = LV.bpm ? LV.bpm * 0.75 + best * 0.25 : best; LV.votes = 0; }
-  else if (Math.abs(best - LV.cand) / best < 0.03) { if (++LV.votes >= 3) { LV.bpm = best; LV.votes = 0; } }
-  else { LV.cand = best; LV.votes = 1; }
-  const P = 3000 / LV.bpm, NB = 24, hist = new Float32Array(NB);
-  for (let s = slot - 299; s <= slot; s++) { const v = LV.env[(s + 2048) % 512]; if (v > 0) hist[Math.floor(((s / P) % 1) * NB) % NB] += v; }
+  const w = Math.min(1, acI(3000 / best) / a0);
+  LV.conf = LV.conf * 0.6 + w * 0.4;
+  /* every second's pick is a vote in a tally kept for the whole track (0.25 BPM bins, old votes fade with a ~45 s
+     half-life so a tempo change is still followed); the tempo is the heaviest +-0.5 BPM spot, and it only moves to
+     another spot once that one clearly outweighs it, so one odd second (a fill, a break) can't knock it off */
+  const H0 = LV.hist; for (let i = 0; i < H0.length; i++) H0[i] *= 0.985;
+  const bin = (bp) => Math.round((bp - 60) * 4), at = (i) => (i >= 0 && i < H0.length ? H0[i] : 0);
+  const bi = bin(best); if (bi >= 0 && bi < H0.length) H0[bi] += w;
+  const mass = (i) => at(i - 2) * 0.5 + at(i - 1) + at(i) + at(i + 1) + at(i + 2) * 0.5;
+  let pk = 0, pm = -1; for (let i = 0; i < H0.length; i++) { const m = mass(i); if (m > pm) { pm = m; pk = i; } }
+  const cur = LV.bpm ? bin(LV.bpm) : -1;
+  if (cur < 0 || Math.abs(pk - cur) <= 2 || pm > mass(cur) * 1.3) {
+    let s = 0, sw = 0; for (let i = pk - 4; i <= pk + 4; i++) { s += at(i) * (60 + i / 4); sw += at(i); }
+    LV.bpm = sw > 0 ? s / sw : best;
+  }
+  let tot = 0; for (let i = 0; i < H0.length; i++) tot += H0[i];
+  LV.share = tot > 0 ? pm / tot : 0; LV.n++;
+  // beat phase: fold the last 9 s at the tempo in use (the tag's when there is one). LV.anchor is the time of one
+  // recent beat; a new fold that roughly agrees is eased in, and one that puts the beat somewhere else entirely only
+  // takes over after 3 seconds in a row, so the lock doesn't hop to the off-beat and back
+  const bp = BT.tag >= 40 && BT.tag <= 250 ? BT.tag : LV.bpm, P = 3000 / bp, NB = 24, hist = new Float32Array(NB);
+  for (let s = slot - 449; s <= slot; s++) { const v = LV.env[(s + 2048) % 512]; if (v > 0) hist[Math.floor(((s / P) % 1) * NB) % NB] += v; }
   let mi = 0; for (let b = 1; b < NB; b++) if (hist[b] > hist[mi]) mi = b;
-  LV.per = P * 20; LV.anchor = ((mi + 0.5) / NB) * LV.per - 30; // -30 ms: the stream's analysis window lags the sound a little
+  const per = P * 20, a = (Math.floor(slot / P) + (mi + 0.5) / NB) * per - 30; // -30 ms: the stream's analysis window lags the sound a little
+  if (!LV.per) { LV.anchor = a; LV.flip = 0; }
+  else {
+    let d = (a - LV.anchor) / per; d -= Math.round(d);
+    if (Math.abs(d) < 0.2) { LV.anchor += d * per * 0.35; LV.flip = 0; }
+    else if (++LV.flip >= 3) { LV.anchor = a; LV.flip = 0; }
+  }
+  LV.per = per;
 }
 // called every frame from drawSpec, before the centerpiece
 function updateBeat(active, now, dt) {
@@ -3558,7 +3598,7 @@ function updateBeat(active, now, dt) {
   let bpm = 0, target = null, wrap = true;
   if (!active && custOpen) { bpm = 120; target = now / 500; }        // the customizer's demo beat (kick every 0.5 s)
   else if (active) {
-    const pos = BT.pos + (BT.running ? (now - BT.posT) / 1000 : 0) + CFG.beatOffset, sc = BT.scan, liveOk = LV.per > 0 && LV.conf > 0.18;
+    const pos = BT.pos + (BT.running ? (now - BT.posT) / 1000 : 0) + CFG.beatOffset, sc = BT.scan, liveOk = LV.per > 0 && (LV.conf > 0.18 || (LV.n >= 6 && LV.share > 0.3)); // a settled tally keeps the lock through a quiet patch
     const liveT = (bp) => (now + CFG.beatOffset * 1000 - LV.anchor) / (60000 / bp);
     if (sc) { bpm = sc.bpm; target = (pos - sc.offset) / (60 / sc.bpm); wrap = false; BT.src = sc.src; }
     else if (BT.tag >= 40 && BT.tag <= 250) { bpm = BT.tag; target = liveOk ? liveT(bpm) : null; BT.src = 'tag'; }
@@ -4694,6 +4734,7 @@ showVol(); showOrder(); showSAC(); render();
 if (Y2K.listDir(Y2K.profileDir + '/webview/y2k/splash').some((f) => /^metalheart\.exe$/i.test(f.name)))   // (a copy without the launcher)
   safe(() => H.execute((Y2K.profileDir + '/webview/y2k/splash/Metalheart.exe').split('/').join(Y2K.BS), '--tag', '', 'open', 0));
 { const done = Y2K.bootHold(), art = $('art'); setTimeout(done, 2500); if (art.getAttribute('src')) art.decode().then(done, done); else done(); }
+
 
 </script>
 </body>

@@ -1039,7 +1039,7 @@ const Y2K = (() => {
   /* --------------------------------------------------------------- theme updates
      VERSION is this copy of the theme: bump it for every GitHub release and tag the release v<VERSION>.
      checkUpdate asks GitHub for the latest release (cached an hour unless forced). */
-  const VERSION = '1.7';
+  const VERSION = '1.7.1';
   const REPO = 'embe-mb/foobar2000-Metalheart-Y2K';
   const verNum = (s) => String(s || '').replace(/^v/i, '').split('.').map((n) => parseInt(n, 10) || 0);
   function isNewer(a, b) {
@@ -1435,13 +1435,16 @@ const Y2K = (() => {
   }
 
   function onTrackContextChange(cb) {
-    let last = trackKey();
-    const fire = (why) => { last = trackKey(); cb(why); };
+    // what a stream's title update changes; a VBR file's bitrate updates (twice a second) change none of it
+    const meta = () => safe(() => H.nowPlaying('[%artist%]|[%album%]|[%title%]'), '');
+    let last = trackKey(), lastMeta = meta();
+    const fire = (why) => { last = trackKey(); lastMeta = meta(); cb(why); };
     // focus / selection / switching playlists only matter when they change the track shown (filling Library
-    // Selection sends a stream of them); tag edits and stream titles always do
-    const MOVE = new Set(['playlist:focusChanged', 'playlist:selectionChanged', 'playlist:activated']);
+    // Selection sends a stream of them), dynamic info only when a stream's title / artist / album moved; tag edits
+    // and track changes always do. (Redrawing the whole deck on every VBR bitrate tick raced its cover colour read.)
+    const MOVE = new Set(['playlist:focusChanged', 'playlist:selectionChanged', 'playlist:activated', 'playback:dynamicInfo']);
     let moves = true;
-    const d = debounce(() => { const onlyMoves = moves; moves = true; if (onlyMoves && trackKey() === last) return; fire('event'); }, 120);
+    const d = debounce(() => { const onlyMoves = moves; moves = true; if (onlyMoves && trackKey() === last && meta() === lastMeta) return; fire('event'); }, 120);
     ['playback:trackChanged', 'playback:starting', 'playback:stopped', 'playback:edited', 'playback:dynamicInfo',
       'playlist:focusChanged', 'playlist:activated', 'playlist:itemsModified', 'playlist:selectionChanged']
       .forEach((e) => fb2k.on(e, () => { if (!MOVE.has(e)) moves = false; d(); }));
@@ -1470,7 +1473,9 @@ const Y2K = (() => {
     fb2k.on('playback:stopped', () => set(() => { PB.playing = PB.paused = false; PB.pos = 0; }));
     fb2k.on('playback:paused', (p) => set(() => { PB.paused = !!(p && p.paused); }));
     fb2k.on('playback:seeked', (p) => set(() => { PB.pos = +(p && p.time) || 0; }));
-    fb2k.on('playback:time', (p) => { if (PB.playing && !PB.paused && p) { PB.pos = +p.time || 0; PB.at = performance.now(); } });
+    // the once-a-second time event carries the whole second it ticked over (and lands ~0.2 s after it), so it's only
+    // trusted when the running clock is clearly lost; taking it as the position yanked the clock back 0.2 s every second
+    fb2k.on('playback:time', (p) => { if (PB.playing && !PB.paused && p && Math.abs((+p.time || 0) - pbPos()) > 1.5) { PB.pos = +p.time || 0; PB.at = performance.now(); } });
     let asking = false;
     setInterval(() => {
       if (document.hidden || asking) return;
@@ -1478,9 +1483,13 @@ const Y2K = (() => {
       const gen = PB.gen, t = performance.now();
       Promise.all([ha(() => HA.isPlaying, false), ha(() => HA.isPaused, false), ha(() => HA.position, 0)]).then(([pl, pa, po]) => {
         if (gen !== PB.gen) return;   // an event got here first: it is newer
-        const now = performance.now();
+        const now = performance.now(), rtt = now - t, was = PB.playing && !PB.paused, pred = pbPos();
         PB.playing = !!pl; PB.paused = PB.playing && !!pa;
-        PB.pos = PB.playing ? (+po || 0) + (PB.paused ? 0 : (now - t) / 2000) : 0; PB.at = now;   // read half way there
+        const est = PB.playing ? (+po || 0) + (PB.paused ? 0 : rtt / 2000) : 0, d = est - pred;   // read half way there
+        // the clock only drifts slowly: small differences are mostly the answer's own delay, so they're eased in (and
+        // a slow answer, whose delay can't be judged, is only believed when it's far off); a real jump is taken at once
+        if (!was || !PB.playing || PB.paused || Math.abs(d) > 0.4) { PB.pos = est; PB.at = now; }
+        else if (rtt < 80) { PB.pos = pred + d * 0.3; PB.at = now; }
       }, () => {}).finally(() => { asking = false; });
     }, 250);
   }
